@@ -1,77 +1,62 @@
-# Preset Control
+# 预设控制台 · Preset Control
 
-Native SillyTavern UI extension for toggling and arranging preset prompt entries
-(port of the `preset-easy-toggle` Tavern Helper script).
+A native SillyTavern extension that turns a chat-completion preset's flat prompt
+list into a clean, floating console for toggling and arranging entries — a
+friendlier layer over ST's built-in prompt manager.
 
-## Repo layout
+## Features
 
-The **repository root is the installable extension** (same model as most native
-ST extensions, e.g. Titania Theater): SillyTavern clones this repo into
-`extensions/third-party/` and loads `manifest.json` → `index.js` directly. There
-is no build step on ST's side, so the built `index.js` is committed.
+- **Floating, draggable console** — a small trigger you can drop anywhere; it opens
+  into a panel with two modes: **使用 (In-use)** to operate and **编辑 (Edit)** to
+  configure. No settings drawer to dig through.
+- **Rule-aware toggles** — each entry renders the right control automatically:
+  single-select (radio), multi-select (checkbox), 📍 always-on (locked), and
+  ✍️ input (text box). Changes apply to SillyTavern live and save to the preset.
+- **Virtual grouping** — create and rename groups, move entries between them, and
+  nest up to two levels. Your preset is never reordered; the grouping is an overlay
+  stored in config.
+- **Modes & Snapshots** — define named **Modes (模式)** that scope and arrange a
+  subset of groups, and save ON/OFF combinations as **Snapshots (快照)** you apply
+  in one click.
+- **Required groups & cleanup** — mark a group 必开 (must keep one entry on) and it
+  self-enforces; hide noise; pin important groups to the top.
+- **Travels with the preset** — all config lives inside the preset, so it survives
+  ST edits and preset switches. Export / import to back it up or move it to another
+  preset.
+- **Theme & mobile** — light/dark toggle and a responsive layout for phones.
 
-```
-manifest.json            # extension manifest, "js": "index.js"
-index.js                 # built bundle (committed; produced by `pnpm build`)
-src/preset-easy-toggle/  # source: Vue UI + Pinia store + native mount entry
-  native.ts              # webpack entry — mounts the floating console
-  App.vue, components/   # UI
-  store.ts, parser.ts, config.ts, preset-io-native.ts …
-  DESIGN.md              # design spec / decision log
-  *.check.ts             # ad-hoc dev assertions (not shipped)
-webpack.config.js        # bundles src/preset-easy-toggle/native.ts → ./index.js
-```
+## Use cases
 
-## Build
+- You keep **one large preset** with many modular entries (POV, persona, styles,
+  plot blocks, model-specific COT tails) and ST's flat prompt manager is painful to
+  operate. Group them once, then flip them like a control panel.
+- You switch between **setups** constantly — claude / gpt / gemini profiles, or
+  写作 / 总结 / 大纲 — and want them one tap away as Snapshots instead of
+  re-checking a dozen boxes every time.
+- You want toggles that **stick**: every change writes to the live preset and to
+  disk, so your selections survive leaving and returning.
 
-```sh
-pnpm build        # production → ./index.js
-pnpm build:dev    # development build
-```
+## Installation
 
-The build emits a single ESM bundle (`index.js`) at the repo root with CSS
-inlined. Commit the rebuilt `index.js` so installs pick up the change.
-
-## Install from GitHub
-
-1. In SillyTavern, open **Extensions** → **Install Extension**.
+1. In SillyTavern, open the **Extensions** menu and click **Install Extension**.
 2. Paste the repository URL:
-
-   ```text
+   ```
    https://github.com/Foi012/preset_control
    ```
+3. Click **Install**, then **refresh** the page.
+4. Select a chat-completion preset that contains a `⚙️CUSTOMIZATION_START / _END`
+   region — the console trigger then appears on screen.
 
-3. Click **Install**, then refresh the page.
+SillyTavern clones the repo into `data/<user>/extensions/preset_control/` and loads
+`manifest.json` → `index.js`.
 
-SillyTavern clones the repo and loads the root `manifest.json`, which points at
-the committed `index.js`.
+## Development
 
-## Manual install
-
-Copy the whole repository folder into your user extensions directory:
-
-```text
-data/<user-handle>/extensions/preset_control/
-```
-
-(Only `manifest.json` and `index.js` are needed at runtime; the rest is source.)
-
-## Checks
+The repository root is the installable extension; the source lives in
+`src/preset-easy-toggle/` (Vue 3 + Pinia, bundled by webpack). Rebuild the committed
+`index.js` after changing source:
 
 ```sh
-pnpm check:parser
-pnpm check:config
-pnpm check:preset-io
-pnpm check:preset-io-native
-pnpm check:store
+pnpm install
+pnpm build      # production bundle → ./index.js
 ```
-
-## Native port notes
-
-- `src/preset-easy-toggle/` is the shared parser/config/store/UI carried over from the Tavern Helper prototype.
-- `src/preset-easy-toggle/preset-io-native.ts` adapts native SillyTavern OpenAI presets to the existing `PresetGateway`.
-- Prompt definitions come from `chatCompletionSettings.prompts`; enabled state and order come from OpenAI `prompt_order`.
-- The console config is stored in `preset.extensions.presetEasyToggle`, surfaced to the existing config reader as virtual config entries.
-- `src/preset-easy-toggle/native.ts` mounts the app into a Shadow DOM host and keeps the existing draggable trigger/panel behavior.
-- Header export downloads only the console config JSON: groups, modes, snapshots, entry metadata, and UI config.
-- Header import accepts either that raw config JSON or a full SillyTavern preset export containing `[⚙️CONSOLE-CONFIG]`.
