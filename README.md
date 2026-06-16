@@ -8,7 +8,39 @@ Native SillyTavern UI extension port of `preset-easy-toggle`.
 pnpm build
 ```
 
-The installable extension is emitted to:
+The repository root is directly installable through SillyTavern's extension installer.
+`manifest.json` at the root points to the built bundle under `dist/`.
+
+## Install From GitHub
+
+1. 打开 SillyTavern，点击顶部的 扩展 (Extensions) 图标。
+2. 点击 "Install Extension" (安装扩展)。
+3. 粘贴仓库地址：
+
+```text
+https://github.com/Foi012/preset_control
+```
+
+4. 点击 "Install"。
+5. 刷新网页即可生效。
+
+SillyTavern will clone this repository into:
+
+```text
+data/<user-handle>/extensions/preset_control/
+```
+
+The root `manifest.json` loads the bundled extension from:
+
+```text
+dist/preset-easy-toggle-extension/index.js
+```
+
+No Tavern Helper local files are referenced at runtime.
+
+## Manual Install
+
+For manual install, copy the emitted extension folder:
 
 ```text
 dist/preset-easy-toggle-extension/

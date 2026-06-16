@@ -1,0 +1,12 @@
+{
+  "display_name": "预设控制台",
+  "loading_order": 100,
+  "requires": [],
+  "optional": [],
+  "js": "dist/preset-easy-toggle-extension/index.js",
+  "css": "",
+  "author": "Shjsx2",
+  "version": "0.1.0",
+  "description": "Native SillyTavern UI extension for toggling and arranging preset prompt entries.",
+  "minimum_client_version": "1.12.13"
+}
