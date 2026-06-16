@@ -26,6 +26,7 @@ data/<user-handle>/extensions/preset-easy-toggle-extension/
 pnpm check:parser
 pnpm check:config
 pnpm check:preset-io
+pnpm check:preset-io-native
 pnpm check:store
 ```
 
@@ -36,4 +37,5 @@ pnpm check:store
 - Prompt definitions come from `chatCompletionSettings.prompts`; enabled state and order come from OpenAI `prompt_order`.
 - The console config is stored in `preset.extensions.presetEasyToggle`, surfaced to the existing config reader as virtual config entries.
 - `src/preset-easy-toggle/native.ts` mounts the app into a Shadow DOM host and keeps the existing draggable trigger/panel behavior.
-
+- Header export downloads only the console config JSON: groups, modes, snapshots, entry metadata, and UI config.
+- Header import accepts either that raw config JSON or a full SillyTavern preset export containing `[⚙️CONSOLE-CONFIG]`.

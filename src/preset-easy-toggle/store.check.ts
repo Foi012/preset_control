@@ -210,6 +210,23 @@ async function main() {
   await store.addGroup('不应写入'); // always reaches commitConfig — must be blocked
   check('commit blocked while corrupt — primary entry untouched', runtime.dumpUnused().find(p => p.name === CONFIG_ENTRY_NAME)!.content, beforeBlocked);
 
+  // Manual import/export should move only the console config JSON and validate it
+  // through the same schema as the preset reader.
+  const exported = store.exportConfigJson();
+  const importCfg = defaultConfig();
+  importCfg.scenarios = [{ id: 'imp', name: '导入配置', groupIds: [], layout: [], selections: {}, snapshots: [] }];
+  await store.importConfigJson(serializeConfig(importCfg));
+  check('manual import persists config', readConfig(runtime.dumpAll()).scenarios[0]?.name, '导入配置');
+  check('manual export returns valid config JSON', readConfig([{ id: 'tmp', name: CONFIG_ENTRY_NAME, enabled: false, content: exported }]).version, 1);
+  const presetExportCfg = defaultConfig();
+  presetExportCfg.scenarios = [{ id: 'imp2', name: '预设导入', groupIds: [], layout: [], selections: {}, snapshots: [] }];
+  await store.importConfigJson(
+    JSON.stringify({
+      prompts_unused: [{ id: 'cfg-export', name: CONFIG_ENTRY_NAME, enabled: false, content: serializeConfig(presetExportCfg) }],
+    }),
+  );
+  check('manual import extracts config from full preset export', readConfig(runtime.dumpAll()).scenarios[0]?.name, '预设导入');
+
   // --- migration: an older preset stored config in the placed (visible) list -------
   {
     const migCfg = defaultConfig();

@@ -268,15 +268,12 @@ function deleteActiveSnapshot(): void {
 }
 .pet-snapshotbar__actions {
   display: inline-flex;
+  align-items: center;
   flex: none;
   /* Push the action cluster to the right edge, matching the group-header layout rule
      (title …flex… right-side cluster) used across the other surfaces. */
   margin-left: auto;
-  gap: 1px;
-}
-.pet-snapshotbar__actions :deep(.pet-ico) {
-  width: 22px;
-  height: 22px;
+  gap: var(--pet-space-xs);
 }
 .pet-snapshotbar__empty {
   flex: none;

@@ -7,6 +7,7 @@ export type IconName =
   | 'chevron-up'
   | 'close'
   | 'edit'
+  | 'download'
   | 'eye'
   | 'eye-off'
   | 'fold'
@@ -24,7 +25,8 @@ export type IconName =
   | 'sun'
   | 'trash'
   | 'type'
-  | 'unfold';
+  | 'unfold'
+  | 'upload';
 </script>
 
 <script setup lang="ts">
@@ -42,6 +44,7 @@ defineProps<{ name: IconName }>();
     <path v-else-if="name === 'chevron-down'" d="m6 9 6 6 6-6" />
     <path v-else-if="name === 'chevron-up'" d="m18 15-6-6-6 6" />
     <path v-else-if="name === 'close'" d="M6 6l12 12M18 6 6 18" />
+    <path v-else-if="name === 'download'" d="M12 3v12M7 10l5 5 5-5M5 21h14" />
     <path v-else-if="name === 'edit'" d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
     <template v-else-if="name === 'eye'">
       <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
@@ -83,6 +86,7 @@ defineProps<{ name: IconName }>();
     <path v-else-if="name === 'trash'" d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3" />
     <path v-else-if="name === 'type'" d="M4 7V4h16v3M12 4v16M8 20h8" />
     <path v-else-if="name === 'unfold'" d="M7 5l5 5 5-5M7 19l5-5 5 5" />
+    <path v-else-if="name === 'upload'" d="M12 15V3M7 8l5-5 5 5M5 21h14" />
   </svg>
 </template>
 
