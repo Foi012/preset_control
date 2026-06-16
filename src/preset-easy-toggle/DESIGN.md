@@ -693,6 +693,13 @@ Verify: `BUILD_ENTRY=preset-easy-toggle pnpm build` (current prod bundle is larg
 > (`character_id: 100001`). It does **not** expose `prompts_unused` in native OpenAI preset data. Native config storage is
 > therefore `preset.extensions.presetEasyToggle` (read/written through the current preset object), while the existing
 > config reader still sees virtual `[⚙️CONSOLE-CONFIG]` entries supplied by `presetGatewayNative()`.
+>
+> **Manual transfer decision:** instead of automatic one-time migration from Tavern Helper storage, the panel exposes
+> explicit import/export buttons. Export downloads only the console config JSON (groups, modes, snapshots, entry metadata,
+> UI config). Import accepts either that raw config JSON or a full SillyTavern preset export containing
+> `[⚙️CONSOLE-CONFIG]` in `prompts_unused`/`prompts`, validates the extracted config through `ConfigSchema`, and overwrites
+> the current preset's native console config. Prompt definitions and live enabled switches are not exported except where
+> snapshots already record them.
 
 ### Plans
 

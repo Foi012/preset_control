@@ -23,7 +23,7 @@ import {
   tavernGateway,
   type PresetGateway,
 } from './preset-io';
-import { defaultConfig, type ConfigStatus } from './config';
+import { CONFIG_BACKUP_ENTRY_NAME, CONFIG_ENTRY_NAME, ConfigSchema, defaultConfig, serializeConfig, type ConfigStatus } from './config';
 import type { ModeGroupLayout, ModeSnapshot, ResolvedEntry, ResolvedScenario, ResolvedSection, ResolvedView } from './types';
 
 let gateway: PresetGateway = tavernGateway();
@@ -349,6 +349,72 @@ export const useConsoleStore = defineStore('pet-console', () => {
       return Promise.resolve();
     }
     return apply(() => saveConfig(gateway, plain(config.value)));
+  }
+
+  function exportConfigJson(): string {
+    return serializeConfig(plain(config.value));
+  }
+
+  function parseImportConfig(raw: unknown): Config | null {
+    if (!raw || typeof raw !== 'object') return null;
+
+    const object = raw as Record<string, unknown>;
+    const looksLikeConfig = ['version', 'region', 'groups', 'customGroups', 'entryMeta', 'scenarios', 'ui'].some(key =>
+      Object.hasOwn(object, key),
+    );
+    if (looksLikeConfig) {
+      const direct = ConfigSchema.safeParse(raw);
+      if (direct.success) return direct.data;
+    }
+
+    const preset = object as {
+      extensions?: { presetEasyToggle?: { config?: unknown; backup?: unknown } };
+      prompts_unused?: Array<{ name?: unknown; content?: unknown }>;
+      prompts?: Array<{ name?: unknown; content?: unknown }>;
+    };
+
+    const candidates: unknown[] = [
+      preset.extensions?.presetEasyToggle?.config,
+      preset.extensions?.presetEasyToggle?.backup,
+      ...(preset.prompts_unused ?? [])
+        .filter(prompt => prompt.name === CONFIG_ENTRY_NAME || prompt.name === CONFIG_BACKUP_ENTRY_NAME)
+        .map(prompt => prompt.content),
+      ...(preset.prompts ?? [])
+        .filter(prompt => prompt.name === CONFIG_ENTRY_NAME || prompt.name === CONFIG_BACKUP_ENTRY_NAME)
+        .map(prompt => prompt.content),
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') continue;
+      try {
+        const parsed = ConfigSchema.safeParse(JSON.parse(candidate));
+        if (parsed.success) return parsed.data;
+      } catch {
+        // Try the next candidate; imports can contain a corrupt primary plus valid backup.
+      }
+    }
+    return null;
+  }
+
+  async function importConfigJson(json: string): Promise<void> {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(json);
+    } catch {
+      toastr.error('请选择有效的 JSON 配置文件。', '导入失败');
+      return;
+    }
+
+    const imported = parseImportConfig(raw);
+    if (!imported) {
+      toastr.error('文件不是有效的控制台配置或含控制台配置的预设。', '导入失败');
+      return;
+    }
+
+    config.value = imported;
+    configStatus.value = 'ok';
+    await apply(() => saveConfig(gateway, plain(config.value)), '已导入配置');
+    await enforceRequired();
   }
 
   // --- edit mode: groups ----------------------------------------------------
@@ -1132,6 +1198,8 @@ export const useConsoleStore = defineStore('pet-console', () => {
     reload,
     load,
     externalReload,
+    exportConfigJson,
+    importConfigJson,
     // in-use
     toggleEntry,
     toggleFolder,
