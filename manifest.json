@@ -3,7 +3,7 @@
   "loading_order": 100,
   "requires": [],
   "optional": [],
-  "js": "index.js",
+  "js": "dist/preset-easy-toggle-extension/index.js",
   "css": "",
   "author": "Susie",
   "version": "0.1.0",

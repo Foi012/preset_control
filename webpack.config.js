@@ -13,7 +13,14 @@ class CopyManifestPlugin {
   apply(compiler) {
     compiler.hooks.afterEmit.tap('CopyManifestPlugin', () => {
       fs.mkdirSync(outDir, { recursive: true });
-      fs.copyFileSync(path.join(root, 'src', extensionName, 'manifest.json'), path.join(outDir, 'manifest.json'));
+      const sourcePath = path.join(root, 'src', extensionName, 'manifest.json');
+      const source = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+
+      fs.writeFileSync(path.join(outDir, 'manifest.json'), `${JSON.stringify(source, null, 2)}\n`);
+      fs.writeFileSync(
+        path.join(root, 'manifest.json'),
+        `${JSON.stringify({ ...source, js: `dist/${extensionName}/index.js` }, null, 2)}\n`,
+      );
     });
   }
 }
@@ -22,7 +29,7 @@ export default {
   experiments: {
     outputModule: true,
   },
-  devtool: 'source-map',
+  devtool: false,
   entry: path.join(root, 'src', extensionName, 'index.ts'),
   target: 'browserslist',
   output: {
@@ -98,4 +105,3 @@ export default {
     splitChunks: false,
   },
 };
-
