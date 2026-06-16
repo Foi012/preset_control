@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import PetIcon from './PetIcon.vue';
+import type { IconName } from './PetIcon.vue';
 
 export interface DropdownOption {
   value: string;
   label: string;
+  icon?: IconName;
   disabled?: boolean;
 }
 
@@ -14,16 +16,20 @@ const props = withDefaults(
     options: DropdownOption[];
     placeholder?: string;
     disabled?: boolean;
-    variant?: 'field' | 'inline';
+    variant?: 'field' | 'inline' | 'icon';
     placement?: 'bottom' | 'top';
+    align?: 'left' | 'right';
     title?: string;
+    triggerIcon?: IconName;
   }>(),
   {
     placeholder: '选择...',
     disabled: false,
     variant: 'field',
     placement: 'bottom',
+    align: 'left',
     title: undefined,
+    triggerIcon: undefined,
   },
 );
 
@@ -60,6 +66,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
     :class="[
       `pet-dd--${variant}`,
       `pet-dd--${placement}`,
+      `pet-dd--align-${align}`,
       { 'pet-dd--open': open, 'pet-dd--empty': !selected, 'pet-dd--disabled': disabled },
     ]"
   >
@@ -71,8 +78,9 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
       :aria-expanded="open"
       @click="toggle"
     >
-      <span class="pet-dd__label">{{ displayLabel }}</span>
-      <PetIcon name="chevron-down" />
+      <PetIcon v-if="triggerIcon" :name="triggerIcon" />
+      <span v-else class="pet-dd__label">{{ displayLabel }}</span>
+      <PetIcon v-if="!triggerIcon" name="chevron-down" />
     </button>
     <div v-if="open" class="pet-dd__menu">
       <button
@@ -85,7 +93,10 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
         :title="option.label"
         @click="choose(option)"
       >
-        {{ option.label }}
+        <span v-if="option.icon" class="pet-dd__option-icon">
+          <PetIcon :name="option.icon" />
+        </span>
+        <span class="pet-dd__option-label">{{ option.label }}</span>
       </button>
     </div>
   </div>
@@ -160,6 +171,37 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
   height: 16px;
   margin-top: 1px;
 }
+.pet-dd--icon {
+  flex: none;
+}
+.pet-dd--icon .pet-dd__button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 0;
+  color: var(--pet-color-icon);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--pet-radius-sm);
+  transition:
+    color var(--pet-motion-fast) var(--pet-motion-ease),
+    background var(--pet-motion-fast) var(--pet-motion-ease),
+    border-color var(--pet-motion-fast) var(--pet-motion-ease);
+}
+.pet-dd--icon .pet-dd__button:hover:not(:disabled) {
+  color: var(--pet-color-text);
+  background: var(--pet-color-surface-raised);
+}
+.pet-dd--icon.pet-dd--open .pet-dd__button {
+  color: var(--pet-color-accent-text);
+  background: var(--pet-color-accent);
+  border-color: var(--pet-color-accent);
+}
+.pet-dd--icon.pet-dd--open .pet-dd__button :deep(.pet-icon) {
+  transform: none;
+}
 .pet-dd__button:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--pet-color-accent), transparent 65%);
@@ -192,10 +234,17 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
 .pet-dd--top .pet-dd__menu {
   bottom: calc(100% + var(--pet-space-xs));
 }
+.pet-dd--align-right .pet-dd__menu {
+  right: 0;
+  left: auto;
+}
 .pet-dd--inline .pet-dd__menu {
   min-width: 148px;
 }
 .pet-dd__option {
+  display: flex;
+  align-items: center;
+  gap: var(--pet-space-sm);
   flex: none;
   width: 100%;
   min-width: 0;
@@ -211,6 +260,25 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+}
+.pet-dd__option-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--pet-color-icon);
+  pointer-events: none;
+}
+.pet-dd__option-icon :deep(.pet-icon) {
+  width: 14px;
+  height: 14px;
+}
+.pet-dd__option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pet-dd__option:hover:not(:disabled),
 .pet-dd__option--on {
