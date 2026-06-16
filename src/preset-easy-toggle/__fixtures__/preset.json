@@ -1,0 +1,81 @@
+{
+  "_note": "Trimmed fixture modelled on TavernHelper getPreset('in_use') shape. Long contents truncated; header contents kept empty on purpose. Out-of-region scaffold reduced to a few boundary entries.",
+  "prompts": [
+    { "id": "0322500e-vars", "name": "📍VARS", "enabled": true, "content": "{{setvar::narrative_register:: }}…" },
+    { "id": "3bc68d3b-start", "name": "⚙️CUSTOMIZATION_START", "enabled": true, "content": "" },
+
+    { "id": "778e4de1-h00", "name": "[00-USER INPUT]", "enabled": true, "content": "" },
+    { "id": "6a0e1556-lang", "name": "📍✍️正文语言（自填）", "enabled": true, "content": "{{setvar::language::…}}" },
+    { "id": "8b5a3ed8-dlgfmt", "name": "📍✍️对话格式（自填）", "enabled": true, "content": "{{setvar::dialogue_format::…}}" },
+    { "id": "c5ee4b21-plot", "name": "✍️剧情偏好（自填）", "enabled": true, "content": "{{setvar::plot::（建立新亲密关系）}}" },
+    { "id": "7855d8d5-monofmt", "name": "✍️独白格式（自填）", "enabled": false, "content": "{{setvar::monologue_format::…}}" },
+    { "id": "c9247957-genre", "name": "✍️小说类型（自填）", "enabled": true, "content": "{{setvar::genre::现代都市}}" },
+    { "id": "0ba58523-sexsight", "name": "✍️性爱凝视（自填）", "enabled": true, "content": "{{setvar::sex_sight::…}}" },
+    { "id": "fccefbb4-sexfocus", "name": "✍️性爱焦点（自填）", "enabled": false, "content": "{{setvar::sex_focus::…}}" },
+    { "id": "54b50290-styleself", "name": "✍️文风自改（仅在聪明LLM+优秀开场白时用）", "enabled": true, "content": "{{setvar::narrative_register::…}}" },
+
+    { "id": "d9ef0a0d-h01", "name": "[01-PERSONA]", "enabled": true, "content": "" },
+    { "id": "2d45ddfd-dramg", "name": "Dramatron_gemini", "enabled": false, "content": "{{setvar::persona::…}}" },
+    { "id": "e1c37ade-dramng", "name": "Dramatron_non-gemini", "enabled": false, "content": "{{setvar::persona::…}}" },
+    { "id": "e5b61c0f-hugong", "name": "Hugo_non-gemini", "enabled": true, "content": "{{setvar::persona::…}}" },
+    { "id": "6bb63e0b-hugog", "name": "Hugo_gemini", "enabled": false, "content": "{{setvar::persona::…}}" },
+
+    { "id": "cc929562-h02", "name": "[02-DIALOGUE]", "enabled": true, "content": "" },
+    { "id": "c196c006-grab", "name": "抢话", "enabled": true, "content": "{{setvar::speak_for_user::…}}" },
+    { "id": "924ad6d1-nograb", "name": "不抢话", "enabled": false, "content": "{{setvar::speak_for_user::…}}" },
+    { "id": "a4ae2334-mononpc", "name": "独白-NPC", "enabled": false, "content": "{{setvar::monologue::…}}" },
+    { "id": "e8702b84-monouser", "name": "独白-user", "enabled": false, "content": "{{setvar::monologue::…}}" },
+    { "id": "c48c8ec7-moredlg", "name": "对话加强", "enabled": false, "content": "{{setvar::more_dialogue::…}}" },
+
+    { "id": "8cb532f5-h03", "name": "[03-POV]", "enabled": true, "content": "" },
+    { "id": "a411becb-pov1u", "name": "第一人称-user", "enabled": false, "content": "{{setvar::POV::…}}" },
+    { "id": "53a4f10f-pov1n", "name": "第一人称-非user", "enabled": false, "content": "{{setvar::POV::…}}" },
+    { "id": "2b6313b3-pov2", "name": "第二人称", "enabled": true, "content": "{{setvar::POV::…}}" },
+    { "id": "97fad988-pov3u", "name": "第三人称-<user>", "enabled": false, "content": "{{setvar::POV::…}}" },
+    { "id": "a72ac6da-pov3n", "name": "第三人称-非<user>", "enabled": false, "content": "{{setvar::POV::…}}" },
+
+    { "id": "96a91780-h04", "name": "[04-PLOTS]", "enabled": true, "content": "" },
+    { "id": "3ab041ca-push", "name": "推进剧情", "enabled": true, "content": "{{setvar::pacing::…}}" },
+    { "id": "02741377-npc", "name": "主动npc", "enabled": true, "content": "{{setvar::proactive_npc::…}}" },
+    { "id": "9fd1bfaf-nodrama", "name": "避免戏剧化剧情", "enabled": false, "content": "{{setvar::less_drama_plot::…}}" },
+    { "id": "3eb332c6-slow", "name": "慢炖剧情", "enabled": false, "content": "{{setvar::slow_burn_plot::…}}" },
+    { "id": "71b57e78-sense", "name": "鼓励感知叙事", "enabled": false, "content": "{{setvar::straightforward_plot::…}}" },
+
+    { "id": "ba3ea246-h05", "name": "[05-CHAR_BUILDING]", "enabled": true, "content": "" },
+    { "id": "e49daefc-nopossess", "name": "防占有", "enabled": true, "content": "{{setvar::intensive_love::…}}" },
+    { "id": "452cb464-dynchar", "name": "动态角色", "enabled": false, "content": "{{setvar::dynamic_char::…}}" },
+    { "id": "f348f086-noadver", "name": "防对抗感情", "enabled": false, "content": "{{setvar::love_as_exposure::…}}" },
+    { "id": "acb6b76e-nodom", "name": "防支配", "enabled": false, "content": "{{setvar::anti_control::…}}" },
+    { "id": "98a649d4-norobot", "name": "防机械化", "enabled": false, "content": "{{setvar::anti_robotic::…}}" },
+    { "id": "1e48821d-noomni", "name": "防全知", "enabled": false, "content": "{{setvar::anti_omniscience::…}}" },
+    { "id": "208ad1bf-power", "name": "权力不对等下的健康关系", "enabled": false, "content": "{{setvar::power_asymmetry::…}}" },
+
+    { "id": "0dce758e-h06", "name": "[06-OTHERS]", "enabled": true, "content": "" },
+    { "id": "0846a4ef-paraphrase", "name": "转述用户的话", "enabled": true, "content": "{{setvar::paraphrase::…}}" },
+    { "id": "79abe170-priority", "name": "指令优先级", "enabled": true, "content": "{{setvar::priority::…}}" },
+    { "id": "4aced6cb-nogender", "name": "无性别歧视", "enabled": false, "content": "{{setvar::cut_gendered_trope::…}}" },
+    { "id": "44c32464-nousercentric", "name": "去user中心化", "enabled": false, "content": "{{setvar::anti_user_centric::…}}" },
+    { "id": "5f3297ec-noreflex", "name": "减少惯性用词", "enabled": false, "content": "{{setvar::avoid_reflexes::…}}" },
+    { "id": "fc50de46-sexintensity", "name": "性爱强度", "enabled": false, "content": "{{setvar::sex_intensity::…}}" },
+    { "id": "9f1e9381-empty", "name": "空", "enabled": false, "content": "{{setvar::physical_position::…}}" },
+
+    { "id": "e707efeb-h07", "name": "[07-STYLES]", "enabled": true, "content": "" },
+    { "id": "f67b3638-comedy", "name": "文风-轻喜剧", "enabled": false, "content": "{{setvar::narrative_register::…}}" },
+    { "id": "32cf2d73-lyric", "name": "文风-抒情文学小说", "enabled": false, "content": "{{setvar::narrative_register::…}}" },
+    { "id": "dfffb119-light", "name": "文风-轻小说", "enabled": false, "content": "{{setvar::narrative_register::…}}" },
+    { "id": "0b1c2b33-sensual", "name": "文风-官能小说", "enabled": false, "content": "{{setvar::narrative_register::…}}" },
+
+    { "id": "5b2316c4-h08", "name": "[08-SCENE]", "enabled": true, "content": "" },
+    { "id": "550394f9-general", "name": "📍General", "enabled": true, "content": "{{setvar::scene_architecture::…}}" },
+    { "id": "de1a5ffc-gpt", "name": "GPT-scene_architecture", "enabled": false, "content": "{{setvar::scene_architecture::…}}" },
+    { "id": "caf7b890-claude", "name": "Claude-scene_architecture", "enabled": false, "content": "{{setvar::scene_patches::…}}" },
+    { "id": "9a6532cf-ds", "name": "DS-scene_architecture", "enabled": false, "content": "{{setvar::scene_patches::…}}" },
+    { "id": "d655c012-gemini", "name": "Gemini-scene_architecture", "enabled": false, "content": "{{setvar::scene_patches::…}}" },
+
+    { "id": "746e94db-end", "name": "⚙️CUSTOMIZATION_END", "enabled": true, "content": "" },
+
+    { "id": "fddb7b5b-clear", "name": "💠CLAUDE/CLEAR", "enabled": false, "content": "[ALL PREVIOUS PROMPT…]" },
+    { "id": "main", "name": "💠GENERAL/CLEAR", "enabled": true, "content": "[ALL PREVIOUS PROMPT…]" },
+    { "id": "d07b0943-head", "name": "📍HEAD STRUCTURE", "enabled": true, "content": "{{getvar::persona}}…" }
+  ]
+}

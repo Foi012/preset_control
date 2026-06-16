@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "types": [],
+    "outDir": "dist-check"
+  },
+  "include": ["src/preset-easy-toggle/**/*.ts", "src/preset-easy-toggle/**/*.json"]
+}
