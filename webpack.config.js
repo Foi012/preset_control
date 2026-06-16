@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import TerserPlugin from 'terser-webpack-plugin';
 import TsconfigPathsPlugin from 'tsconfig-paths-webpack-plugin';
@@ -6,38 +5,24 @@ import { VueLoaderPlugin } from 'vue-loader';
 import webpack from 'webpack';
 
 const root = import.meta.dirname;
-const extensionName = 'preset-easy-toggle-extension';
-const outDir = path.join(root, 'dist', extensionName);
-
-class CopyManifestPlugin {
-  apply(compiler) {
-    compiler.hooks.afterEmit.tap('CopyManifestPlugin', () => {
-      fs.mkdirSync(outDir, { recursive: true });
-      const sourcePath = path.join(root, 'src', extensionName, 'manifest.json');
-      const source = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
-
-      fs.writeFileSync(path.join(outDir, 'manifest.json'), `${JSON.stringify(source, null, 2)}\n`);
-      fs.writeFileSync(
-        path.join(root, 'manifest.json'),
-        `${JSON.stringify({ ...source, js: `dist/${extensionName}/index.js` }, null, 2)}\n`,
-      );
-    });
-  }
-}
 
 export default {
   experiments: {
     outputModule: true,
   },
   devtool: false,
-  entry: path.join(root, 'src', extensionName, 'index.ts'),
+  // The whole app (Vue UI + native mount) lives under src/preset-easy-toggle.
+  entry: path.join(root, 'src', 'preset-easy-toggle', 'native.ts'),
   target: 'browserslist',
   output: {
+    // SillyTavern clones this repo as the extension folder and loads the file
+    // named by manifest.json ("index.js") from the repo root — so we emit there.
     filename: 'index.js',
-    path: outDir,
+    path: root,
     publicPath: '',
     library: { type: 'module' },
-    clean: true,
+    // Never clean: the output dir is the repo root.
+    clean: false,
   },
   module: {
     rules: [
@@ -88,7 +73,6 @@ export default {
       __VUE_PROD_DEVTOOLS__: false,
       __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
     }),
-    new CopyManifestPlugin(),
   ],
   optimization: {
     concatenateModules: false,
