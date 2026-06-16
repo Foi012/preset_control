@@ -156,8 +156,14 @@ function writeExtensionConfig(current: NativeSettings, promptsUnused: PresetProm
 
 function notifySettingsChanged(ctx: NativeContext): void {
   ctx.saveSettingsDebounced?.();
-  const eventName = ctx.eventTypes?.SETTINGS_UPDATED;
-  if (eventName) void ctx.eventSource?.emit?.(eventName);
+  // SETTINGS_UPDATED keeps general listeners in sync, but ST's PromptManager only
+  // re-renders its prompt list (the ON/OFF checkboxes) on OAI_PRESET_CHANGED_AFTER.
+  // We mutate oai_settings in place, so emitting it makes ST's own UI reflect our
+  // toggles / snapshot applies instead of showing stale state.
+  const settingsUpdated = ctx.eventTypes?.SETTINGS_UPDATED;
+  if (settingsUpdated) void ctx.eventSource?.emit?.(settingsUpdated);
+  const presetChangedAfter = ctx.eventTypes?.OAI_PRESET_CHANGED_AFTER;
+  if (presetChangedAfter) void ctx.eventSource?.emit?.(presetChangedAfter);
 }
 
 export function presetGatewayNative(): PresetGateway {

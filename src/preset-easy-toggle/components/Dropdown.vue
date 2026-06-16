@@ -52,11 +52,14 @@ function choose(option: DropdownOption): void {
 }
 
 function onDocumentPointerDown(event: PointerEvent): void {
-  if (!root.value?.contains(event.target as Node)) open.value = false;
+  // composedPath() so a click inside the dropdown is recognised across the Shadow
+  // DOM boundary (event.target is retargeted to the host there). Capture phase so
+  // an upstream stopPropagation() can't keep the menu stuck open.
+  if (root.value && !event.composedPath().includes(root.value)) open.value = false;
 }
 
-onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDown));
-onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPointerDown));
+onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDown, true));
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPointerDown, true));
 </script>
 
 <template>

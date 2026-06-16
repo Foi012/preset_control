@@ -150,6 +150,11 @@ function runMenuAction(action: string): void {
   padding: var(--pet-space-sm) var(--pet-space-md);
   border-bottom: 1px solid var(--pet-color-border);
   background: transparent;
+  /* backdrop-filter makes the bar its own stacking context; an explicit z-index
+     lifts that whole layer (incl. the open gear dropdown that overflows below)
+     above the tabs/body, so the menu is no longer covered by the search box. */
+  position: relative;
+  z-index: 30;
   backdrop-filter: blur(var(--pet-effect-glass-blur));
 }
 .pet-panel__title {
