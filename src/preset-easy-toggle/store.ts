@@ -276,7 +276,15 @@ export const useConsoleStore = defineStore('pet-console', () => {
     // prompt list, where ST's prompt manager shows them. Move them into the unplaced
     // list once (only writes when a stale copy is actually present, and never when the
     // config is corrupt — see commitConfig's guard).
-    if (configStatus.value !== 'corrupt' && needsConfigMigration(gateway)) await commitConfig();
+    if (configStatus.value !== 'corrupt' && needsConfigMigration(gateway)) {
+      await commitConfig();
+      // commitConfig only *schedules* a debounced disk write. Flush it now so the
+      // migration's cleanup (the placed [⚙️CONSOLE-CONFIG]/-BACKUP entries are already
+      // stripped from the live preset) reaches disk immediately — otherwise the old
+      // placed copies linger on disk, duplicated alongside extensions.presetEasyToggle,
+      // until some later (and possibly cancelled) save.
+      autosaver.flush();
+    }
     await enforceRequired();
   }
 
