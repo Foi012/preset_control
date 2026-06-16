@@ -1,56 +1,60 @@
 # Preset Control
 
-Native SillyTavern UI extension port of `preset-easy-toggle`.
+Native SillyTavern UI extension for toggling and arranging preset prompt entries
+(port of the `preset-easy-toggle` Tavern Helper script).
+
+## Repo layout
+
+The **repository root is the installable extension** (same model as most native
+ST extensions, e.g. Titania Theater): SillyTavern clones this repo into
+`extensions/third-party/` and loads `manifest.json` → `index.js` directly. There
+is no build step on ST's side, so the built `index.js` is committed.
+
+```
+manifest.json            # extension manifest, "js": "index.js"
+index.js                 # built bundle (committed; produced by `pnpm build`)
+src/preset-easy-toggle/  # source: Vue UI + Pinia store + native mount entry
+  native.ts              # webpack entry — mounts the floating console
+  App.vue, components/   # UI
+  store.ts, parser.ts, config.ts, preset-io-native.ts …
+  DESIGN.md              # design spec / decision log
+  *.check.ts             # ad-hoc dev assertions (not shipped)
+webpack.config.js        # bundles src/preset-easy-toggle/native.ts → ./index.js
+```
 
 ## Build
 
 ```sh
-pnpm build
+pnpm build        # production → ./index.js
+pnpm build:dev    # development build
 ```
 
-The repository root is directly installable through SillyTavern's extension installer.
-`manifest.json` at the root points to the built bundle under `dist/`.
+The build emits a single ESM bundle (`index.js`) at the repo root with CSS
+inlined. Commit the rebuilt `index.js` so installs pick up the change.
 
-## Install From GitHub
+## Install from GitHub
 
-1. 打开 SillyTavern，点击顶部的 扩展 (Extensions) 图标。
-2. 点击 "Install Extension" (安装扩展)。
-3. 粘贴仓库地址：
+1. In SillyTavern, open **Extensions** → **Install Extension**.
+2. Paste the repository URL:
 
-```text
-https://github.com/Foi012/preset_control
-```
+   ```text
+   https://github.com/Foi012/preset_control
+   ```
 
-4. 点击 "Install"。
-5. 刷新网页即可生效。
+3. Click **Install**, then refresh the page.
 
-SillyTavern will clone this repository into:
+SillyTavern clones the repo and loads the root `manifest.json`, which points at
+the committed `index.js`.
+
+## Manual install
+
+Copy the whole repository folder into your user extensions directory:
 
 ```text
 data/<user-handle>/extensions/preset_control/
 ```
 
-The root `manifest.json` loads the bundled extension from:
-
-```text
-dist/preset-easy-toggle-extension/index.js
-```
-
-No Tavern Helper local files are referenced at runtime.
-
-## Manual Install
-
-For manual install, copy the emitted extension folder:
-
-```text
-dist/preset-easy-toggle-extension/
-```
-
-Copy that folder into SillyTavern's user extension directory:
-
-```text
-data/<user-handle>/extensions/preset-easy-toggle-extension/
-```
+(Only `manifest.json` and `index.js` are needed at runtime; the rest is source.)
 
 ## Checks
 
@@ -62,9 +66,9 @@ pnpm check:preset-io-native
 pnpm check:store
 ```
 
-## Native Port Notes
+## Native port notes
 
-- `src/preset-easy-toggle/` is the shared parser/config/store/UI copied from the Tavern Helper prototype.
+- `src/preset-easy-toggle/` is the shared parser/config/store/UI carried over from the Tavern Helper prototype.
 - `src/preset-easy-toggle/preset-io-native.ts` adapts native SillyTavern OpenAI presets to the existing `PresetGateway`.
 - Prompt definitions come from `chatCompletionSettings.prompts`; enabled state and order come from OpenAI `prompt_order`.
 - The console config is stored in `preset.extensions.presetEasyToggle`, surfaced to the existing config reader as virtual config entries.
