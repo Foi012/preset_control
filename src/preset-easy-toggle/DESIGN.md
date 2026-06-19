@@ -54,6 +54,26 @@
 > **Build order** (see end of file): 1 parser ✓ · 2 config ✓ · 3 preset I/O ✓ · 4 mount shell + trigger ✓ · 5 in-use
 > view ✓ · 6 edit view ✓ · 7 custom grouping ✓ (virtual overlay).
 >
+> **Native extension fixes — Dropdown + ST panel sync (2026-06-19):** Two native-only bugs that did **not** appear in
+> the Tavern-Helper iframe build (different mount, different gateway) and so were missed in the port.
+> (1) **Dropdown swallowed selections under shadow DOM.** `native.ts` mounts the app in a `host.attachShadow` root;
+> `Dropdown.vue` closed on outside-click via `document` `pointerdown` + `root.contains(event.target)`, but a click inside
+> the shadow root **retargets `event.target` to the shadow host** (outside `root`), so it read as an outside-click,
+> set `open=false`, and the `v-if` removed the option before its `click` could fire `choose()`. This broke **every**
+> Dropdown — snapshot swap (`InUseView`) and the import/export/sync gear (`PresetConsole`). Fix: use
+> `event.composedPath().includes(root.value)`, which pierces the shadow boundary and is correct in both the shadow DOM and
+> the iframe. (Only `Dropdown` used that pattern.)
+> (2) **Snapshot/toggle changes didn't reflect in ST's own prompt-manager panel.** The gateway write reaches
+> `oai_settings.prompt_order` (char id **100001**, matching openai.js's chat-completion `dummyId` and what generation +
+> our console read), so applies were *functionally* correct — but ST's built-in prompt-manager panel only re-renders on
+> model/source/message/preset events, never on our `SETTINGS_UPDATED`, and `promptManager` is not exposed via
+> `getContext()`. Its checkboxes therefore showed a **stale** view until a page refresh ("snapshot needs a refresh").
+> Fix: after each gateway write, `notifySettingsChanged` also emits `CHATCOMPLETION_MODEL_CHANGED` — whose sole ST-core
+> listener is `promptManager.renderDebounced()` — nudging ST to re-render its panel from the settings we just wrote. The
+> native mount listens only to `OAI_PRESET_CHANGED_AFTER`/`SETTINGS_UPDATED`, so no feedback loop. (Config storage is a
+> non-bug: native keeps it in the preset's `extensions.presetEasyToggle`, which round-trips on save/load — verified — so
+> it intentionally does not appear as a `[⚙️CONSOLE-CONFIG]` prompt in ST's manager, unlike the Tavern-Helper build.)
+>
 > **Mode snapshots refactor (2026-06-15):** Modes are now **scope/layout only**. Clicking a mode chip changes which
 > groups are shown/arranged but no longer mutates prompt switches. Saved ON/OFF combinations are explicit **Snapshots**
 > inside each mode (`snapshots[]`); applying a snapshot is the only mode-related action that calls
