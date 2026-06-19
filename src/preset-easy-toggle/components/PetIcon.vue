@@ -1,6 +1,7 @@
 <script lang="ts">
 export type IconName =
   | 'add'
+  | 'arrow-left'
   | 'bookmark-plus'
   | 'check'
   | 'chevron-down'
@@ -36,6 +37,7 @@ defineProps<{ name: IconName }>();
 <template>
   <svg class="pet-icon" viewBox="0 0 24 24" aria-hidden="true">
     <path v-if="name === 'add'" d="M12 5v14M5 12h14" />
+    <path v-else-if="name === 'arrow-left'" d="M19 12H5M11 6l-6 6 6 6" />
     <template v-else-if="name === 'bookmark-plus'">
       <path d="M6 3h12v18l-6-4-6 4V3Z" />
       <path d="M12 7v5M9.5 9.5h5" />

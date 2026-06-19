@@ -52,7 +52,13 @@ function choose(option: DropdownOption): void {
 }
 
 function onDocumentPointerDown(event: PointerEvent): void {
-  if (!root.value?.contains(event.target as Node)) open.value = false;
+  // Use composedPath, not event.target: under the native extension the app lives in a
+  // shadow root, so a click inside the menu retargets `event.target` to the shadow host
+  // (outside `root`) and would wrongly close the menu before the option's click fires —
+  // breaking every Dropdown (snapshot swap, import/export). composedPath pierces the
+  // shadow boundary and lists the real inner nodes, so this works in shadow DOM and the
+  // Tavern-Helper iframe alike.
+  if (root.value && !event.composedPath().includes(root.value)) open.value = false;
 }
 
 onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDown));

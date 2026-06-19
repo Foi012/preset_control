@@ -1253,8 +1253,34 @@ export const useConsoleStore = defineStore('pet-console', () => {
 
 export type ThemePref = 'dark' | 'light';
 
+/** Toolbox tools the floating panel can host. `home` = the launcher/feature picker. */
+export type ToolId = 'home' | 'preset' | 'export';
+
+const ACTIVE_TOOL_KEY = 'presetConsoleActiveTool';
+
+/** Best-effort persistence: the srcdoc iframe can have an opaque-origin localStorage. */
+function readActiveTool(): ToolId {
+  try {
+    const raw = window.localStorage?.getItem(ACTIVE_TOOL_KEY);
+    if (raw === 'home' || raw === 'preset' || raw === 'export') return raw;
+  } catch {
+    /* opaque origin / disabled storage — fall back to the launcher */
+  }
+  return 'home';
+}
+
+function writeActiveTool(tool: ToolId): void {
+  try {
+    window.localStorage?.setItem(ACTIVE_TOOL_KEY, tool);
+  } catch {
+    /* ignore — persistence is best-effort, session state still works */
+  }
+}
+
 export const useUiStore = defineStore('pet-ui', () => {
   const open = ref(false);
+  /** Which toolbox feature the panel shows when open. Persisted so a refresh reopens it. */
+  const activeTool = ref<ToolId>(readActiveTool());
   const mode = ref<'in-use' | 'edit'>('in-use');
   const theme = ref<ThemePref>('dark');
   /**
@@ -1294,9 +1320,15 @@ export const useUiStore = defineStore('pet-ui', () => {
   function toggleTheme(): void {
     theme.value = theme.value === 'dark' ? 'light' : 'dark';
   }
+  /** Switch the active toolbox tool and persist the choice. */
+  function setActiveTool(tool: ToolId): void {
+    activeTool.value = tool;
+    writeActiveTool(tool);
+  }
 
   return {
     open,
+    activeTool,
     mode,
     theme,
     compact,
@@ -1309,5 +1341,6 @@ export const useUiStore = defineStore('pet-ui', () => {
     editContextId,
     setTheme,
     toggleTheme,
+    setActiveTool,
   };
 });
