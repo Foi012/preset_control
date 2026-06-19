@@ -158,6 +158,17 @@ function notifySettingsChanged(ctx: NativeContext): void {
   ctx.saveSettingsDebounced?.();
   const eventName = ctx.eventTypes?.SETTINGS_UPDATED;
   if (eventName) void ctx.eventSource?.emit?.(eventName);
+
+  // Re-sync SillyTavern's own chat-completion prompt-manager panel. It re-renders only
+  // on model/source/message/preset events — never on the SETTINGS_UPDATED we just
+  // emitted — and `promptManager` isn't exposed for us to call render() directly. So
+  // after we change enabled states through the gateway, ST's built-in checkbox panel
+  // shows a STALE view until the next interaction (the "snapshot needs a refresh"
+  // report — our console + generation already use the new state; only ST's panel lags).
+  // CHATCOMPLETION_MODEL_CHANGED's sole ST-core listener is promptManager.renderDebounced,
+  // so emitting it nudges that panel to re-render from the oai_settings we just wrote.
+  const renderEvent = ctx.eventTypes?.CHATCOMPLETION_MODEL_CHANGED;
+  if (renderEvent) void ctx.eventSource?.emit?.(renderEvent);
 }
 
 export function presetGatewayNative(): PresetGateway {
