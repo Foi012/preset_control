@@ -230,14 +230,50 @@ function clearAllRules(): void {
 const rawMessages = ref<RawMessage[]>([]);
 
 // Phase 3 — before/after preview navigator. Step through messages and compare the
-// raw content against the cleaned/extracted body. `assistantOnlyNav` narrows the walk
-// to AI turns, where extraction actually does something.
+// raw content against the cleaned/extracted body. `navScope` narrows the walk to AI
+// turns or to just the flagged messages (empty / unmatched) for focused review.
 const focusIndex = ref(0);
-const assistantOnlyNav = ref(false);
+type NavScope = 'all' | 'assistant' | 'flagged';
+const navScope = ref<NavScope>('all');
 
-const navMessages = computed(() =>
-  assistantOnlyNav.value ? messages.value.filter(m => m.role === 'assistant') : messages.value,
-);
+// Per-message diagnostics over the export set (parallel to `messages`): empty after the
+// rules (silently dropped) and assistant turns that didn't match 正文/标题 (fell back to
+// whole text). One scan, reused by the flag banner *and* the 仅标记 nav filter.
+const messageDiags = computed(() => {
+  const hasRules = includeRules.value.length > 0 || titleRules.value.length > 0;
+  return messages.value.map(m => {
+    const ex = extractMessage(m.content, m.role, config.value);
+    const empty = !ex.body.trim();
+    const unmatched = hasRules && m.role === 'assistant' && !ex.matched;
+    return { empty, unmatched, flagged: empty || unmatched };
+  });
+});
+const previewFlags = computed(() => {
+  let empty = 0;
+  let unmatched = 0;
+  let flaggedTotal = 0;
+  for (const d of messageDiags.value) {
+    if (d.empty) empty++;
+    if (d.unmatched) unmatched++;
+    if (d.flagged) flaggedTotal++;
+  }
+  return { empty, unmatched, flaggedTotal };
+});
+
+const navMessages = computed(() => {
+  if (navScope.value === 'assistant') return messages.value.filter(m => m.role === 'assistant');
+  if (navScope.value === 'flagged') return messages.value.filter((_, i) => messageDiags.value[i]?.flagged);
+  return messages.value;
+});
+// The 仅标记 segment only appears when there's something flagged to review.
+const navScopeOptions = computed(() => {
+  const opts = [
+    { value: 'all', label: '全部' },
+    { value: 'assistant', label: '仅 AI' },
+  ];
+  if (previewFlags.value.flaggedTotal > 0) opts.push({ value: 'flagged', label: `仅标记 (${previewFlags.value.flaggedTotal})` });
+  return opts;
+});
 const focused = computed<NormMessage | null>(() => navMessages.value[Math.min(focusIndex.value, navMessages.value.length - 1)] ?? null);
 const focusedExtract = computed(() => (focused.value ? extractMessage(focused.value.content, focused.value.role, config.value) : null));
 
@@ -261,36 +297,21 @@ function focusNext(): void {
 function resetNav(): void {
   focusIndex.value = 0;
 }
-
-// Step ③ health flags — one scan over the export set: messages that go empty after the
-// rules (silently dropped from the book) and assistant turns that didn't match the
-// 正文/标题 rules (fell back to whole text). Indices are into `messages` for jump-to.
-const previewFlags = computed(() => {
-  const hasRules = includeRules.value.length > 0 || titleRules.value.length > 0;
-  let empty = 0;
-  let unmatched = 0;
-  let firstEmpty = -1;
-  let firstUnmatched = -1;
-  messages.value.forEach((m, i) => {
-    const ex = extractMessage(m.content, m.role, config.value);
-    if (!ex.body.trim()) {
-      empty++;
-      if (firstEmpty < 0) firstEmpty = i;
-    }
-    if (hasRules && m.role === 'assistant' && !ex.matched) {
-      unmatched++;
-      if (firstUnmatched < 0) firstUnmatched = i;
-    }
-  });
-  return { empty, unmatched, firstEmpty, firstUnmatched };
-});
-
-/** Jump the preview to a flagged message (index into `messages`); show all roles so it's reachable. */
-function jumpToFlag(idx: number): void {
-  if (idx < 0) return;
-  assistantOnlyNav.value = false;
-  focusIndex.value = idx;
+function setNavScope(scope: string): void {
+  navScope.value = scope as NavScope;
+  resetNav();
 }
+/** Banner action: review every flagged message one-by-one via the existing prev/next nav. */
+function reviewFlagged(): void {
+  setNavScope('flagged');
+}
+// If rule edits clear all flags while in 仅标记, fall back to 全部 so the preview isn't empty.
+watch(
+  () => previewFlags.value.flaggedTotal,
+  total => {
+    if (total === 0 && navScope.value === 'flagged') setNavScope('all');
+  },
+);
 
 // Phase 4 — book metadata, chapter splitting, export.
 const bookTitle = ref('');
@@ -836,19 +857,19 @@ async function onDrop(event: DragEvent): Promise<void> {
       <h2 class="cex__title">预览效果</h2>
       <p class="cex__lead">逐条对比原文与整理后的正文，确认规则符合预期。</p>
 
-      <!-- Health flags: silent drops / unmatched rules, each jumps to the first case. -->
+      <!-- Health flags: silent drops / unmatched rules; review them all via the 仅标记 nav filter. -->
       <div v-if="previewFlags.empty || previewFlags.unmatched" class="cex__flags">
         <p v-if="previewFlags.empty" class="cex__flag">
           <PetIcon name="alert" />
           <span>{{ previewFlags.empty }} 条消息清理后为空，不会写入电子书。</span>
-          <button type="button" class="cex__flaglink" @click="jumpToFlag(previewFlags.firstEmpty)">查看</button>
         </p>
         <p v-if="previewFlags.unmatched" class="cex__flag">
           <PetIcon name="alert" />
           <span>{{ previewFlags.unmatched }} 条 AI 消息未匹配正文 / 标题规则，已回退为整段原文。</span>
-          <button type="button" class="cex__flaglink" @click="jumpToFlag(previewFlags.firstUnmatched)">查看</button>
         </p>
-        <button type="button" class="cex__flaglink cex__flags-fix" @click="goStep('rules')">← 返回「规则」调整</button>
+        <button v-if="navScope !== 'flagged'" type="button" class="cex__flaglink cex__flags-fix" @click="reviewFlagged">
+          逐条查看这 {{ previewFlags.flaggedTotal }} 条 →
+        </button>
       </div>
 
       <!-- Phase 3: after / before preview -->
@@ -868,9 +889,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             / {{ navMessages.length }} 条
           </span>
           <IconButton name="chevron-right" title="下一条" :disabled="focusIndex >= navMessages.length - 1" @click="focusNext" />
-          <label class="cex__opt cex__pvfilter">
-            <input type="checkbox" v-model="assistantOnlyNav" @change="resetNav" /> 只看 AI 楼层
-          </label>
+          <Segmented class="cex__pvscope" :model-value="navScope" :options="navScopeOptions" @update:model-value="setNavScope" />
         </div>
         <div class="cex__diff">
           <!-- After first — the result the user is verifying. -->
@@ -1553,9 +1572,8 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text-muted);
 }
-.cex__pvfilter {
+.cex__pvscope {
   margin-left: auto;
-  font-size: var(--pet-font-size-xs);
 }
 /* Pane header — label on the left, badges/role on the right. */
 .cex__pvhead {

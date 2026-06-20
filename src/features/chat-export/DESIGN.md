@@ -45,10 +45,13 @@
 >   user turns into the AI chapter). The **导出 EPUB / TXT** actions live in the fixed footer (`.cex__nav`) on ④,
 >   taking the place of 下一步. ④ book info supports an optional uploaded cover; the image is resized through canvas and embedded as `OEBPS/cover.jpg` to avoid unbounded EPUB size. ③ shows **清理后 above 原文** (result first); the 原文 pane header is card name (+ 隐藏
 >   badge) left, a **bot / user role icon** right, and a number field in the nav jumps straight to any message.
->   ③ also surfaces **health flags** (`previewFlags`, one scan over the export set): how many messages go **empty**
->   after the rules (silently dropped from the book) and how many assistant turns **未匹配** the 正文/标题 rules
->   (fell back to whole text); each flag has a 查看 link that jumps the preview to the first such message, and the
->   focused 清理后 pane shows a per-message **空** / **未匹配** badge.
+>   ③ also surfaces **health flags** (`previewFlags`, derived from a single `messageDiags` scan): how many messages go
+>   **empty** after the rules (silently dropped from the book) and how many assistant turns **未匹配** the 正文/标题
+>   rules (fell back to whole text). The nav has a three-way **scope** Segmented (全部 / 仅 AI / **仅标记 (N)**) — the
+>   仅标记 segment appears only when something is flagged and scopes the existing prev/next walk to *just* the flagged
+>   messages, so all N (mixed causes) are reviewable without round-trips; the banner's 逐条查看 button enters that
+>   scope, and clearing all flags via rule edits auto-falls-back to 全部. The focused 清理后 pane shows a per-message
+>   **空** / **未匹配** badge.
 > - **Rule scope.** 排除 applies to **every** message; 正文/标题 apply to **assistant** turns only (`extractMessage`).
 >   Body tags (`正文`/`body`/`content`/`text`) and unnamed matches become the chapter **body**; other tags / named
 >   regex groups (e.g. `(?<title>…)`) become labelled **fields** (chapter metadata like title).
