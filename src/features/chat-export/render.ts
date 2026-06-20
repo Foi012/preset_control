@@ -87,11 +87,17 @@ const DIVIDER_RE = /^(?:-{3,}|\*{3,}|(?:-\s){2,}-|(?:\*\s){2,}\*)$/;
  * paragraph's inner text is decorated with `<span class>`s.
  */
 export function bodyToParagraphs(body: string, rules: ResolvedRule[] = []): string {
+  let lead = true; // first real paragraph gets `cex-lead` (drop-cap hook; skips dividers + any meta line)
   return body
     .split(/\n{2,}/)
     .map(p => p.trim())
     .filter(Boolean)
-    .map(p => (DIVIDER_RE.test(p) ? '<hr class="cex-divider"/>' : `<p>${rules.length ? decorateInline(p, rules) : escapeBr(p)}</p>`))
+    .map(p => {
+      if (DIVIDER_RE.test(p)) return '<hr class="cex-divider"/>';
+      const cls = lead ? ' class="cex-lead"' : '';
+      lead = false;
+      return `<p${cls}>${rules.length ? decorateInline(p, rules) : escapeBr(p)}</p>`;
+    })
     .join('\n');
 }
 

@@ -57,9 +57,9 @@ check(
 check(
   'bodyToParagraphs decorates each paragraph',
   bodyToParagraphs('他说"嗨"\n\n下一段', dRules),
-  '<p>他说<span class="st-dialogue">&quot;嗨&quot;</span></p>\n<p>下一段</p>',
+  '<p class="cex-lead">他说<span class="st-dialogue">&quot;嗨&quot;</span></p>\n<p>下一段</p>',
 );
-check('bodyToParagraphs with no rules unchanged', bodyToParagraphs('上\n下', []), '<p>上<br/>下</p>');
+check('bodyToParagraphs with no rules unchanged', bodyToParagraphs('上\n下', []), '<p class="cex-lead">上<br/>下</p>');
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
 if (failures > 0) process.exit(1);
