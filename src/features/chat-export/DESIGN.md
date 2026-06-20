@@ -74,9 +74,12 @@
 >   reader's text color in light/dark). This fixes the 角色分隔线 toggle, which previously emitted a literal `<p>---</p>`,
 >   and also catches hand-typed scene breaks (closes the earlier deferred block-level scene-break item). TXT keeps the
 >   literal marker.
-> - **Deferred:** a *styled* (rendered) preview in ③/④ — needs the preset CSS injected into the panel's shadow root;
->   for now the preview stays plain text and the effect is verified in the exported file. Markdown rendering is a
->   separate, larger follow-up (needs a conservative MD parser).
+> - **Rendered preview (④).** The selected-chapter preview is a **WYSIWYG `<iframe srcdoc sandbox>`** that ships the
+>   exact EPUB XHTML + stylesheet (`BOOK_CSS` + `buildStyleCss`), so the book's bare-element CSS (`body`/`p`/`.chapter`)
+>   is fully isolated from the panel and users see dialogue/italics/drop cap/dividers as they'll export. It's a browser
+>   approximation of a reader (a one-line hint says so), but the real markup + CSS. `sandbox=""` blocks scripts (our
+>   content has none). ③ keeps its plain before/after text comparison.
+> - **Deferred:** Markdown rendering — a separate, larger follow-up (needs a conservative MD parser).
 
 ## Why this lives here (toolbox decision)
 

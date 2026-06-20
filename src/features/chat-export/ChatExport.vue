@@ -25,8 +25,8 @@ import { scanTags } from './scan';
 import { buildChapters, type ChapterRule } from './chapters';
 import { chaptersToTxt } from './txt';
 import { buildEpub } from './epub';
-import type { BookMeta } from './render';
-import { STYLE_PRESETS, type StyleConfig, type StyleRule } from './style';
+import { BOOK_CSS, bodyToParagraphs, escapeXml, metaLine, type BookMeta } from './render';
+import { STYLE_PRESETS, buildStyleCss, resolveStyleRules, type StyleConfig, type StyleRule } from './style';
 
 const messages = ref<NormMessage[]>([]);
 const sourceLabel = ref('');
@@ -328,6 +328,22 @@ const chapters = computed(() =>
 const chaptersPreview = computed(() => chapters.value.slice(0, 5));
 const selectedChapterIndex = ref(1);
 const selectedChapter = computed(() => chapters.value.find(ch => ch.index === selectedChapterIndex.value) ?? chapters.value[0] ?? null);
+
+/**
+ * A WYSIWYG render of the selected chapter for the ④ preview: the exact EPUB XHTML +
+ * stylesheet (BOOK_CSS + the enabled styles) inside a sandboxed iframe, so the book's
+ * bare-element CSS is isolated from the panel and users see dialogue/italics/drop cap/
+ * dividers as they'll ship. An approximation of a reader, but the real markup + CSS.
+ */
+const previewDoc = computed(() => {
+  const ch = selectedChapter.value;
+  if (!ch) return '';
+  const extra = buildStyleCss(styleConfig.value);
+  const css = extra ? `${BOOK_CSS}\n${extra}` : BOOK_CSS;
+  const lang = escapeXml(bookLang.value || 'zh');
+  const body = bodyToParagraphs(ch.body, resolveStyleRules(styleConfig.value));
+  return `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"/><style>${css}</style></head><body><section class="chapter"><h1>${escapeXml(ch.title)}</h1>${metaLine(ch.meta)}${body}</section></body></html>`;
+});
 const rangeSummary = computed(() =>
   limitRange.value && availableMessageCount.value
     ? `导出第 ${rangeStart.value}-${rangeEnd.value} 条，共 ${messages.value.length} 条`
@@ -896,7 +912,8 @@ async function onDrop(event: DragEvent): Promise<void> {
             <span class="cex__panelabel">{{ selectedChapter.title }}</span>
             <span class="cex__field">第 {{ selectedChapter.index }} 章</span>
           </div>
-          <div class="cex__panebody cex__chappreview-body">{{ selectedChapter.body }}</div>
+          <iframe class="cex__chappreview-frame" :srcdoc="previewDoc" sandbox="" title="EPUB 预览"></iframe>
+          <p class="cex__hint">近似渲染，实际显示因阅读器而异。</p>
         </div>
       </Section>
 
@@ -1633,8 +1650,14 @@ async function onDrop(event: DragEvent): Promise<void> {
 .cex__chappreview {
   margin-top: var(--pet-space-sm);
 }
-.cex__chappreview-body {
-  max-height: 140px;
+.cex__chappreview-frame {
+  display: block;
+  width: 100%;
+  height: 240px;
+  margin-top: var(--pet-space-sm);
+  border: 1px solid var(--pet-color-border);
+  border-radius: var(--pet-radius-sm);
+  background: #fff;
 }
 
 /* 排版样式 — preset toggle list. */
