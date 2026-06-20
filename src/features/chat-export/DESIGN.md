@@ -53,6 +53,13 @@
 >   / 清理后为空 (N) / 未匹配 (N), the two flag scopes appearing only when they have instances — so the existing prev/next
 >   walk covers all instances of one kind without round-trips. Clearing a scope's instances via rule edits auto-falls
 >   back to 全部. The focused 清理后 pane shows a per-message **空** / **未匹配** badge.
+> - **Jump-to-ST (2026-06-20).** Some flags can't be fixed by a rule (a one-off garbled message) — so the 原文 pane has
+>   an **edit** IconButton (active-chat source only; a `.jsonl` import has no live message) that locates the message in
+>   SillyTavern for hand-editing. `NormMessage.srcIndex` carries the **source array position** (== ST `mesid` for the
+>   active source) through normalize, surviving the range slice. `jumpToStMessage` resolves ST's document (native = our
+>   own `document`; iframe = `parent.document`), then — since ST lazy-renders only recent messages behind a
+>   `#show_more_messages` button — clicks that button (with a tick between each) until `.mes[mesid=N]` renders, scrolls
+>   to it, and flashes a highlight. Best-effort + ST-DOM-dependent: on failure it shows a `jumpError` line.
 > - **Rule scope.** 排除 applies to **every** message; 正文/标题 apply to **assistant** turns only (`extractMessage`).
 >   Body tags (`正文`/`body`/`content`/`text`) and unnamed matches become the chapter **body**; other tags / named
 >   regex groups (e.g. `(?<title>…)`) become labelled **fields** (chapter metadata like title).
