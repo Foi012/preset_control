@@ -9,8 +9,15 @@ import { computed, ref } from 'vue';
 import IconButton from './IconButton.vue';
 
 const props = withDefaults(
-  defineProps<{ title: string; defaultOpen?: boolean; collapsible?: boolean }>(),
-  { defaultOpen: true, collapsible: true },
+  defineProps<{
+    title: string;
+    defaultOpen?: boolean;
+    collapsible?: boolean;
+    /** `md` (default) = `lg` title for a top-level group; `sm` for sections nested
+     *  under a larger page/step title, so the two don't compete (matches egroup__name). */
+    size?: 'md' | 'sm';
+  }>(),
+  { defaultOpen: true, collapsible: true, size: 'md' },
 );
 const open = ref(props.defaultOpen);
 // A non-collapsible section is always shown (no chevron, header not clickable).
@@ -21,7 +28,7 @@ function toggle(): void {
 </script>
 
 <template>
-  <section class="ui-section" :class="{ 'ui-section--collapsed': !shown }">
+  <section class="ui-section" :class="[`ui-section--${size}`, { 'ui-section--collapsed': !shown }]">
     <header class="ui-section__head" :class="{ 'ui-section__head--static': !collapsible }" @click="toggle">
       <IconButton
         v-if="collapsible"
@@ -69,6 +76,10 @@ function toggle(): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Nested under a larger page/step title — smaller name so hierarchy reads clearly. */
+.ui-section--sm .ui-section__name {
+  font-size: var(--pet-font-size-sm);
 }
 .ui-section__badges {
   display: inline-flex;

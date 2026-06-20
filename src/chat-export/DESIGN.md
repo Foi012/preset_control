@@ -22,12 +22,30 @@
 >   bar + ✓). "Done" = a reachable step before the active one (`stepDone()`).
 > - **① 来源.** A hero drop zone (drag `.jsonl`, or 读取当前聊天 / 导入 buttons) with a `sourceState` machine —
 >   **idle / loading / success / error** — driving the zone icon, border tint, and a status line.
-> - **② 规则.** Three `Section`s plus a non-collapsible **扫描标签** scanner on top. **包含内容** = message inclusion
->   (用户/隐藏楼层) + 提取正文 rules; **排除内容** = strip presets (think/OOC) + custom exclude rules. The scanner
->   lists chat tags (capped, scrollable, multi-select + batch bar) and routes each to **不处理 / 排除 / 提取** — a
->   **single bucket per tag**, enforced everywhere (`setTagBucket`, and the add fields cross-clear), so a tag can never
->   be both excluded and extracted.
-> - **Rule scope.** 排除 applies to **every** message; 提取正文 applies to **assistant** turns only (`extractMessage`).
+> - **② 规则.** A non-collapsible **扫描标签** scanner on top, then **包含内容** and **排除内容** `Section`s.
+>   **包含内容** = message inclusion (用户/隐藏楼层) + two destination rule rows — **正文** and **标题** — each a
+>   reusable `RuleField.vue` (labelled add-row + chips below). **排除内容** = strip presets (think/OOC) + custom
+>   exclude rules (one `RuleField`). The scanner lists chat tags (capped, scrollable, multi-select; batch bar reuses the
+>   row's `Segmented`) and routes each to **不处理 / 排除 / 包含**. A rule lives in **one destination only** (排除 /
+>   正文 / 标题), enforced by `pinRule` (cross-clears the other two) and `setTagBucket`. Rows + a **全选** master use the
+>   shared `SelectMark` (on/off/partial), mirroring the preset console; the header swaps the **全选** row for the batch
+>   `Segmented` once tags are selected (no layout shift). A **清除** badge button wipes every routed tag/rule on the page
+>   (`clearAllRules`). `SelectMark` was promoted from `preset-easy-toggle/components` to **`@/ui`** so chat-export reuses
+>   it without depending on the preset module (keeps the boundary clean).
+>   **Vocabulary** (drops the old 提取 collision): **正文** (body) · **标题** (title) · **排除** (exclude) · **不处理**.
+>   To repurpose a span as the chapter title the user adds its tag/regex to the **标题** row → `config.title` →
+>   `fields.title` (`extract.ts`); the title-only match still counts as `matched`.
+> - **Preview height.** ③'s two panes use a **fixed height** (`.cex__panebody`, 160px) so flipping between a short user
+>   turn and a long AI turn doesn't resize the page; overflow scrolls inside each pane.
+> - **Width.** The panel is fixed-narrow (`min(385px, viewport−8)`, `native.ts`) — effectively always mobile width —
+>   so layout relies on the fluid `@/ui` primitives + `min-width:0`/truncation rather than `@media` breakpoints.
+> - **Step chrome.** ②③④ open with the same `.cex__title` + `.cex__lead` header as ①; their `Section`s use
+>   `size="sm"` (Section's nested variant — `sm` title) so they sit clearly **under** the step title, not competing.
+>   ④ groups 书籍信息 / 章节切分 in `Section`s; each 章节切分 option carries a one-line `hint` (e.g. per-assistant folds
+>   user turns into the AI chapter). The **导出 EPUB / TXT** actions live in the fixed footer (`.cex__nav`) on ④,
+>   taking the place of 下一步. ③ shows **清理后 above 原文** (result first); the 原文 pane header is card name (+ 隐藏
+>   badge) left, a **bot / user role icon** right, and a number field in the nav jumps straight to any message.
+> - **Rule scope.** 排除 applies to **every** message; 正文/标题 apply to **assistant** turns only (`extractMessage`).
 >   Body tags (`正文`/`body`/`content`/`text`) and unnamed matches become the chapter **body**; other tags / named
 >   regex groups (e.g. `(?<title>…)`) become labelled **fields** (chapter metadata like title).
 

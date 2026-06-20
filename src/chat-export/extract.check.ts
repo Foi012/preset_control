@@ -58,6 +58,19 @@ const miss = extractMessage('没有正文标签的回复', 'assistant', cfg);
 check('include set but no match → matched false', miss.matched, false);
 check('no match → body falls back to full stripped text', miss.body, '没有正文标签的回复');
 
+// --- 标题 destination (title rules pin fields.title) -----------------------
+const t1 = extractMessage('<title>第一章 启程</title><正文>正文体</正文>', 'assistant', {
+  include: ['正文'],
+  title: ['title'],
+});
+check('title tag → title field', t1.fields.title, '第一章 启程');
+check('title rule + body rule compose', t1.body, '正文体');
+
+const t2 = extractMessage('# 月下独行\n正文若干', 'assistant', { title: ['/^#\\s*(?<title>.+)$/m'] });
+check('title regex named group → title field', t2.fields.title, '月下独行');
+check('title-only match counts as matched', t2.matched, true);
+check('title-only → body falls back to full text', t2.body, '# 月下独行\n正文若干');
+
 // --- compose: exclude runs before include ---------------------------------
 const comp = extractMessage('<think>略</think><正文>纯正文</正文>', 'assistant', {
   strip: { reasoning: true },

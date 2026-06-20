@@ -13,7 +13,7 @@ import type { ResolvedSection, SectionRule } from '../types';
 import EntryRow from './EntryRow.vue';
 import IconButton from '@/ui/IconButton.vue';
 import PetIcon from '@/ui/PetIcon.vue';
-import SelectMark from './SelectMark.vue';
+import SelectMark from '@/ui/SelectMark.vue';
 
 const props = withDefaults(
   defineProps<{ section: ResolvedSection; search?: string; parentRule?: SectionRule; nested?: boolean }>(),

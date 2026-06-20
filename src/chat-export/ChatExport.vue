@@ -3,9 +3,9 @@
  * Chat Export tool root.
  *
  * Phase 1: pick a source (active chat / `.jsonl`) → normalize to active-swipe messages.
- * Phase 2 (two-bucket rules): **排除** removes spans from every message (presets +
- * tag/regex rules); **提取正文** keeps only matched content as the body on assistant
- * turns (tag/regex; named groups → fields like title). Tag scanner is a follow-up.
+ * Phase 2 (rules): **排除** removes spans from every message (presets + tag/regex rules);
+ * **正文** keeps only matched content as the body on assistant turns; **标题** pins a
+ * matched span to the chapter title (`config.title`). A 扫描标签 scanner feeds 排除/正文.
  * Richer before/after preview, chapters and EPUB are Phases 3–5. See `DESIGN.md`.
  */
 import { computed, onMounted, ref, watch } from 'vue';
@@ -16,6 +16,8 @@ import TextField from '@/ui/TextField.vue';
 import Dropdown from '@/ui/Dropdown.vue';
 import Section from '@/ui/Section.vue';
 import PetIcon, { type IconName } from '@/ui/PetIcon.vue';
+import RuleField from './RuleField.vue';
+import SelectMark from '@/ui/SelectMark.vue';
 import { loadRawMessages } from './chat-source';
 import { normalizeMessages, type NormMessage, type RawMessage } from './normalize';
 import { extractMessage, ruleError, type ExtractConfig } from './extract';
@@ -95,24 +97,35 @@ const stripReasoning = ref(false);
 const stripOOC = ref(false);
 const excludeRules = ref<string[]>([]);
 const includeRules = ref<string[]>([]);
+const titleRules = ref<string[]>([]);
 const excludeDraft = ref('');
 const includeDraft = ref('');
+const titleDraft = ref('');
 
 const config = computed<ExtractConfig>(() => ({
   strip: { reasoning: stripReasoning.value, ooc: stripOOC.value },
   exclude: excludeRules.value,
   include: includeRules.value,
+  title: titleRules.value,
 }));
 
 const excludeDraftError = computed(() => ruleError(excludeDraft.value));
 const includeDraftError = computed(() => ruleError(includeDraft.value));
+const titleDraftError = computed(() => ruleError(titleDraft.value));
 
+// A rule lives in exactly one destination — 排除 / 正文 / 标题 — so adding it to one
+// clears it from the other two (a span can't be both stripped and kept, etc.).
+function pinRule(target: 'exclude' | 'include' | 'title', v: string): void {
+  excludeRules.value = excludeRules.value.filter(r => r !== v);
+  includeRules.value = includeRules.value.filter(r => r !== v);
+  titleRules.value = titleRules.value.filter(r => r !== v);
+  const bucket = { exclude: excludeRules, include: includeRules, title: titleRules }[target];
+  bucket.value.push(v);
+}
 function addExclude(): void {
   const v = excludeDraft.value.trim();
   if (!v || excludeDraftError.value) return;
-  // A rule lives in one bucket only — adding to 排除 clears it from 提取 (they contradict).
-  includeRules.value = includeRules.value.filter(r => r !== v);
-  if (!excludeRules.value.includes(v)) excludeRules.value.push(v);
+  pinRule('exclude', v);
   excludeDraft.value = '';
 }
 function removeExclude(i: number): void {
@@ -121,12 +134,20 @@ function removeExclude(i: number): void {
 function addInclude(): void {
   const v = includeDraft.value.trim();
   if (!v || includeDraftError.value) return;
-  excludeRules.value = excludeRules.value.filter(r => r !== v);
-  if (!includeRules.value.includes(v)) includeRules.value.push(v);
+  pinRule('include', v);
   includeDraft.value = '';
 }
 function removeInclude(i: number): void {
   includeRules.value.splice(i, 1);
+}
+function addTitle(): void {
+  const v = titleDraft.value.trim();
+  if (!v || titleDraftError.value) return;
+  pinRule('title', v);
+  titleDraft.value = '';
+}
+function removeTitle(i: number): void {
+  titleRules.value.splice(i, 1);
 }
 
 // Tag scanner — list every balanced tag in the chat so the user can click it into a
@@ -134,13 +155,13 @@ function removeInclude(i: number): void {
 const showScan = ref(false);
 const scannedTags = computed(() => (showScan.value ? scanTags(messages.value.map(m => m.content)) : []));
 
-// A scanned tag is routed to at most ONE bucket — 不处理 / 排除 / 提取 — so a tag can
+// A scanned tag is routed to at most ONE bucket — 不处理 / 排除 / 正文 — so a tag can
 // never be both excluded and extracted (which would contradict). Single-select handles it.
 type TagBucket = 'none' | 'exclude' | 'include';
 const SCAN_BUCKETS: { value: TagBucket; label: string }[] = [
   { value: 'none', label: '不处理' },
   { value: 'exclude', label: '排除' },
-  { value: 'include', label: '提取' },
+  { value: 'include', label: '包含' },
 ];
 function tagBucket(tag: string): TagBucket {
   if (excludeRules.value.includes(tag)) return 'exclude';
@@ -148,10 +169,14 @@ function tagBucket(tag: string): TagBucket {
   return 'none';
 }
 function setTagBucket(tag: string, bucket: string): void {
-  excludeRules.value = excludeRules.value.filter(t => t !== tag);
-  includeRules.value = includeRules.value.filter(t => t !== tag);
-  if (bucket === 'exclude') excludeRules.value.push(tag);
-  else if (bucket === 'include') includeRules.value.push(tag);
+  // Routing a scanned tag also clears it from the 标题 set, preserving the single-
+  // destination invariant (the scanner itself only offers 不处理 / 排除 / 正文).
+  titleRules.value = titleRules.value.filter(t => t !== tag);
+  if (bucket === 'exclude' || bucket === 'include') pinRule(bucket, tag);
+  else {
+    excludeRules.value = excludeRules.value.filter(t => t !== tag);
+    includeRules.value = includeRules.value.filter(t => t !== tag);
+  }
 }
 
 // Multi-select on the scan list so a long tag list can be routed in bulk.
@@ -163,6 +188,30 @@ function toggleTagSelect(tag: string): void {
 }
 function applyBucketToSelected(bucket: TagBucket): void {
   for (const tag of selectedTags.value) setTagBucket(tag, bucket);
+  selectedTags.value = [];
+}
+
+// Master select-all for the scan list — on / off / partial, mirroring the preset
+// console's group master (`SelectMark`).
+const selectAllState = computed<'on' | 'off' | 'partial'>(() => {
+  const total = scannedTags.value.length;
+  const picked = selectedTags.value.length;
+  if (total === 0 || picked === 0) return 'off';
+  return picked >= total ? 'on' : 'partial';
+});
+function toggleSelectAll(): void {
+  selectedTags.value = selectAllState.value === 'on' ? [] : scannedTags.value.map(t => t.tag);
+}
+
+// 清除 — wipe every routed tag/rule on the page (排除 / 正文 / 标题) plus the selection,
+// so the user can start the rule set over without re-scanning.
+const hasAnyRule = computed(
+  () => excludeRules.value.length + includeRules.value.length + titleRules.value.length > 0,
+);
+function clearAllRules(): void {
+  excludeRules.value = [];
+  includeRules.value = [];
+  titleRules.value = [];
   selectedTags.value = [];
 }
 
@@ -180,6 +229,17 @@ const navMessages = computed(() =>
 );
 const focused = computed<NormMessage | null>(() => navMessages.value[Math.min(focusIndex.value, navMessages.value.length - 1)] ?? null);
 const focusedExtract = computed(() => (focused.value ? extractMessage(focused.value.content, focused.value.role, config.value) : null));
+
+// 1-based position bound to the editable jump field — clamps so typing 999 lands on
+// the last message rather than off the end.
+const focusPos = computed<number>({
+  get: () => Math.min(focusIndex.value + 1, navMessages.value.length),
+  set: v => {
+    const n = Math.floor(Number(v));
+    if (!Number.isFinite(n)) return;
+    focusIndex.value = Math.min(Math.max(1, n), navMessages.value.length) - 1;
+  },
+});
 
 function focusPrev(): void {
   if (focusIndex.value > 0) focusIndex.value -= 1;
@@ -199,12 +259,13 @@ type ChapterRuleKind = 'per-assistant' | 'per-message' | 'title' | 'every';
 const chapterRuleKind = ref<ChapterRuleKind>('per-assistant');
 const everyN = ref(5);
 
-const CHAPTER_RULE_OPTIONS: { value: ChapterRuleKind; label: string }[] = [
-  { value: 'per-assistant', label: '每条 AI 回复一章' },
-  { value: 'per-message', label: '每条消息一章' },
-  { value: 'title', label: '按 title 标记分章' },
-  { value: 'every', label: '每 N 条消息一章' },
+const CHAPTER_RULE_OPTIONS: { value: ChapterRuleKind; label: string; hint: string }[] = [
+  { value: 'per-assistant', label: '每条 AI 回复一章', hint: '每遇到一条 AI 回复就开新的一章；中间的用户楼层会并入上一章的正文。' },
+  { value: 'per-message', label: '每条消息各自一章', hint: '每条消息单独成一章，用户与 AI 楼层各占一章。' },
+  { value: 'title', label: '按「标题」分章', hint: '每捕获到一个「标题」规则的匹配就开新章（需在上一步设置标题规则）。' },
+  { value: 'every', label: '每 N 条消息一章', hint: '按固定条数把连续消息合并成一章。' },
 ];
+const chapterRuleHint = computed(() => CHAPTER_RULE_OPTIONS.find(o => o.value === chapterRuleKind.value)?.hint ?? '');
 const LANG_OPTIONS = [
   { value: 'zh', label: '中文 (zh)' },
   { value: 'en', label: 'English (en)' },
@@ -264,6 +325,7 @@ function saveRules(): void {
         stripOOC: stripOOC.value,
         exclude: excludeRules.value,
         include: includeRules.value,
+        title: titleRules.value,
         chapterRuleKind: chapterRuleKind.value,
         everyN: everyN.value,
       }),
@@ -281,6 +343,7 @@ function loadRules(): void {
     if (typeof d.stripOOC === 'boolean') stripOOC.value = d.stripOOC;
     if (Array.isArray(d.exclude)) excludeRules.value = d.exclude.filter((x: unknown) => typeof x === 'string');
     if (Array.isArray(d.include)) includeRules.value = d.include.filter((x: unknown) => typeof x === 'string');
+    if (Array.isArray(d.title)) titleRules.value = d.title.filter((x: unknown) => typeof x === 'string');
     if (['per-assistant', 'per-message', 'title', 'every'].includes(d.chapterRuleKind)) chapterRuleKind.value = d.chapterRuleKind;
     if (Number.isFinite(d.everyN)) everyN.value = d.everyN;
   } catch {
@@ -288,11 +351,11 @@ function loadRules(): void {
   }
 }
 onMounted(loadRules);
-watch([stripReasoning, stripOOC, excludeRules, includeRules, chapterRuleKind, everyN], saveRules, { deep: true });
+watch([stripReasoning, stripOOC, excludeRules, includeRules, titleRules, chapterRuleKind, everyN], saveRules, { deep: true });
 
-/** Assistant turns whose include rules matched nothing (the 缺层 warning). */
+/** Assistant turns whose 正文/标题 rules matched nothing (the 缺层 warning). */
 const unmatchedCount = computed(() => {
-  if (includeRules.value.length === 0) return 0;
+  if (includeRules.value.length === 0 && titleRules.value.length === 0) return 0;
   return messages.value.reduce(
     (n, m) => (m.role === 'assistant' && !extractMessage(m.content, m.role, config.value).matched ? n + 1 : n),
     0,
@@ -431,169 +494,202 @@ async function onDrop(event: DragEvent): Promise<void> {
     </section>
 
     <section v-show="step === 'rules'" class="cex__panel">
+      <h2 class="cex__title">整理规则</h2>
+      <p class="cex__lead">挑出要进书的内容，去掉不想要的部分。</p>
+
       <!-- Scanner on top (always shown): its results route into 包含 / 排除 below. -->
-      <Section title="扫描标签" :collapsible="false">
+      <Section title="扫描标签" :collapsible="false" size="sm">
         <template #badges>
+          <Button variant="ghost" size="sm" icon="trash" :disabled="!hasAnyRule" @click="clearAllRules">清除</Button>
           <Button variant="secondary" size="sm" icon="refresh" @click="showScan = !showScan">
             {{ showScan ? '收起结果' : '扫描标签' }}
           </Button>
         </template>
-        <p class="cex__hint">扫描聊天中的成对标签，为每个标签选择 排除 / 提取。</p>
-        <template v-if="showScan">
+        <p v-if="!showScan" class="cex__desc">列出聊天里成对出现的标签，逐个标记成 排除 或 包含。</p>
+        <template v-else>
           <p v-if="!scannedTags.length" class="cex__hint">未发现成对标签。</p>
-          <div v-else class="cex__scanlist">
-            <label v-for="t in scannedTags" :key="t.tag" class="cex__scanrow">
-              <input
-                type="checkbox"
-                class="cex__scancheck"
-                :checked="selectedTags.includes(t.tag)"
-                @change="toggleTagSelect(t.tag)"
-              />
-              <code class="cex__scantag">&lt;{{ t.tag }}&gt;</code>
-              <span class="cex__scancount">×{{ t.count }}</span>
-              <Segmented
-                size="sm"
-                :model-value="tagBucket(t.tag)"
-                :options="SCAN_BUCKETS"
-                @update:model-value="setTagBucket(t.tag, $event)"
-              />
-            </label>
-          </div>
-          <!-- Batch bar for the multi-select, mirroring the preset console's edit bar -->
-          <div v-if="selectedTags.length" class="cex__scanbatch">
-            <span class="cex__scanbatch-count">已选 {{ selectedTags.length }} 项</span>
-            <Button size="sm" variant="secondary" @click="applyBucketToSelected('exclude')">排除</Button>
-            <Button size="sm" variant="secondary" @click="applyBucketToSelected('include')">提取</Button>
-            <Button size="sm" variant="ghost" @click="applyBucketToSelected('none')">不处理</Button>
-          </div>
+          <template v-else>
+            <!-- Header row: select-all master, swapped in-place for the batch control
+                 once tags are selected (so it never pushes the list down). -->
+            <div class="cex__scanhead">
+              <button type="button" class="cex__scanpick cex__scanall" @click="toggleSelectAll">
+                <SelectMark type="checkbox" :state="selectAllState" />
+                <span class="cex__scanall-label">全选</span>
+              </button>
+              <template v-if="selectedTags.length">
+                <span class="cex__scanbatch-count">已选 {{ selectedTags.length }} 项</span>
+                <Segmented
+                  size="sm"
+                  :model-value="''"
+                  :options="SCAN_BUCKETS"
+                  @update:model-value="applyBucketToSelected($event as TagBucket)"
+                />
+              </template>
+            </div>
+            <div class="cex__scanlist">
+              <div v-for="t in scannedTags" :key="t.tag" class="cex__scanrow">
+                <button type="button" class="cex__scanpick" @click="toggleTagSelect(t.tag)">
+                  <SelectMark type="checkbox" :state="selectedTags.includes(t.tag) ? 'on' : 'off'" />
+                  <code class="cex__scantag">&lt;{{ t.tag }}&gt;</code>
+                  <span class="cex__scancount">×{{ t.count }}</span>
+                </button>
+                <Segmented
+                  size="sm"
+                  :model-value="tagBucket(t.tag)"
+                  :options="SCAN_BUCKETS"
+                  @update:model-value="setTagBucket(t.tag, $event)"
+                />
+              </div>
+            </div>
+          </template>
         </template>
       </Section>
 
-      <!-- INCLUDE — which messages, and which content becomes the body. -->
-      <Section title="包含内容">
+      <!-- INCLUDE — which messages go in, and which spans become body / title. -->
+      <Section title="包含内容" size="sm">
+        <p class="cex__desc">选择哪些楼层进书，以及每段保留哪些内容作为正文 / 标题。</p>
         <div class="cex__opts">
           <label class="cex__opt"><input type="checkbox" v-model="includeUser" @change="applyFilters" /> 包含用户发言</label>
           <label class="cex__opt" title="被 /hide 隐藏的真实楼层（常为省 token 而隐藏，通常仍要收进书里）">
             <input type="checkbox" v-model="includeHidden" @change="applyFilters" /> 包含隐藏楼层
           </label>
         </div>
-        <p class="cex__rules-title cex__rules-title--gap">提取正文（仅 AI 楼层）</p>
-        <p class="cex__hint">只保留匹配到的内容作为正文，未设规则时整段即正文。</p>
-        <div v-if="includeRules.length" class="cex__chips">
-          <span v-for="(r, i) in includeRules" :key="r" class="cex__chip">
-            {{ r }}<IconButton name="close" title="移除" danger class="cex__chip-x" @click="removeInclude(i)" />
-          </span>
-        </div>
-        <div class="cex__add">
-          <TextField
-            v-model="includeDraft"
-            mono
-            :invalid="!!includeDraftError"
-            spellcheck="false"
-            placeholder="标签名 正文 / 标题，或正则 (?<title>…) — 回车添加"
-            @keyup.enter="addInclude"
-          />
-          <Button variant="secondary" size="sm" :disabled="!includeDraft.trim() || !!includeDraftError" @click="addInclude">添加</Button>
-        </div>
-        <p v-if="includeDraftError" class="cex__error">正则错误：{{ includeDraftError }}</p>
-        <p v-else-if="unmatchedCount" class="cex__warn">⚠ {{ unmatchedCount }} 条 AI 楼层未匹配正文规则（回退为整段）。</p>
+        <RuleField
+          label="正文"
+          v-model="includeDraft"
+          :rules="includeRules"
+          :error="includeDraftError"
+          placeholder="标签名 正文 / body，或正则 — 回车添加"
+          @add="addInclude"
+          @remove="removeInclude"
+        />
+        <RuleField
+          label="标题"
+          v-model="titleDraft"
+          :rules="titleRules"
+          :error="titleDraftError"
+          placeholder="标签名 title，或正则 (?<title>…) — 回车添加"
+          @add="addTitle"
+          @remove="removeTitle"
+        />
+        <p v-if="unmatchedCount" class="cex__warn">⚠ {{ unmatchedCount }} 条 AI 楼层未匹配规则（正文回退为整段）。</p>
       </Section>
 
       <!-- EXCLUDE — strip spans out of every message (presets + custom rules). -->
-      <Section title="排除内容">
-        <p class="cex__hint">从每条消息中删除指定内容。</p>
+      <Section title="排除内容" size="sm">
+        <p class="cex__desc">从每条消息中删除以下内容，不写进书里。</p>
         <div class="cex__opts">
           <label class="cex__opt"><input type="checkbox" v-model="stripReasoning" /> 去除推理块 &lt;think&gt;</label>
           <label class="cex__opt" title="去除 (OOC: …) / （OOC：…） 等剧情外旁注">
             <input type="checkbox" v-model="stripOOC" /> 去除 OOC 旁注
           </label>
         </div>
-        <div v-if="excludeRules.length" class="cex__chips">
-          <span v-for="(r, i) in excludeRules" :key="r" class="cex__chip">
-            {{ r }}<IconButton name="close" title="移除" danger class="cex__chip-x" @click="removeExclude(i)" />
-          </span>
-        </div>
-        <div class="cex__add">
-          <TextField
-            v-model="excludeDraft"
-            mono
-            :invalid="!!excludeDraftError"
-            spellcheck="false"
-            placeholder="标签名 think，或正则 /pat/flags — 回车添加"
-            @keyup.enter="addExclude"
-          />
-          <Button variant="secondary" size="sm" :disabled="!excludeDraft.trim() || !!excludeDraftError" @click="addExclude">添加</Button>
-        </div>
-        <p v-if="excludeDraftError" class="cex__error">正则错误：{{ excludeDraftError }}</p>
+        <RuleField
+          v-model="excludeDraft"
+          :rules="excludeRules"
+          :error="excludeDraftError"
+          placeholder="标签名 think，或正则 /pat/flags — 回车添加"
+          @add="addExclude"
+          @remove="removeExclude"
+        />
       </Section>
     </section>
 
     <section v-show="step === 'preview'" class="cex__panel">
-      <!-- Phase 3: before / after preview -->
+      <h2 class="cex__title">预览效果</h2>
+      <p class="cex__lead">逐条对比原文与整理后的正文，确认规则符合预期。</p>
+
+      <!-- Phase 3: after / before preview -->
       <div v-if="focused && focusedExtract" class="cex__preview">
         <div class="cex__pvnav">
           <IconButton name="chevron-left" title="上一条" :disabled="focusIndex <= 0" @click="focusPrev" />
-          <span class="cex__pvpos">第 {{ focusIndex + 1 }} / {{ navMessages.length }} 条</span>
+          <span class="cex__pvpos">
+            第
+            <TextField
+              class="cex__pvinput"
+              type="number"
+              :model-value="focusPos"
+              min="1"
+              :max="navMessages.length"
+              @update:model-value="focusPos = Number($event)"
+            />
+            / {{ navMessages.length }} 条
+          </span>
           <IconButton name="chevron-right" title="下一条" :disabled="focusIndex >= navMessages.length - 1" @click="focusNext" />
           <label class="cex__opt cex__pvfilter">
             <input type="checkbox" v-model="assistantOnlyNav" @change="resetNav" /> 只看 AI 楼层
           </label>
         </div>
-        <div class="cex__meta">
-          <span class="cex__role" :class="`cex__role--${focused.role}`">{{ focused.role }}</span>
-          <span v-if="focused.hidden" class="cex__hidden" title="被 /hide 隐藏的楼层">隐藏</span>
-          <span class="cex__name">{{ focused.name }}</span>
-          <span v-for="(val, key) in focusedExtract.fields" :key="key" class="cex__field">{{ key }}: {{ val }}</span>
-          <span
-            v-if="includeRules.length && focused.role === 'assistant' && !focusedExtract.matched"
-            class="cex__nomatch"
-            title="未匹配正文规则，已回退为整段"
-          >未匹配</span>
-        </div>
         <div class="cex__diff">
+          <!-- After first — the result the user is verifying. -->
           <div class="cex__pane">
-            <p class="cex__panelabel">原文</p>
-            <div class="cex__panebody">{{ focused.content }}</div>
-          </div>
-          <div class="cex__pane">
-            <p class="cex__panelabel">清理后</p>
+            <div class="cex__pvhead">
+              <span class="cex__panelabel">清理后</span>
+              <span class="cex__pvhead-tags">
+                <span v-for="(val, key) in focusedExtract.fields" :key="key" class="cex__field">{{ key }}: {{ val }}</span>
+                <span
+                  v-if="(includeRules.length || titleRules.length) && focused.role === 'assistant' && !focusedExtract.matched"
+                  class="cex__nomatch"
+                  title="未匹配正文 / 标题规则，已回退为整段"
+                >未匹配</span>
+              </span>
+            </div>
             <div class="cex__panebody cex__panebody--after">{{ focusedExtract.body }}</div>
+          </div>
+          <!-- Before — the raw message: card name (+ hidden) left, role icon right. -->
+          <div class="cex__pane">
+            <div class="cex__pvhead">
+              <span class="cex__pvhead-name">
+                <span class="cex__name">{{ focused.name }}</span>
+                <span v-if="focused.hidden" class="cex__hidden" title="被 /hide 隐藏的楼层">隐藏</span>
+              </span>
+              <span
+                class="cex__role"
+                :class="`cex__role--${focused.role}`"
+                :title="focused.role === 'assistant' ? 'AI 楼层' : '用户楼层'"
+              >
+                <PetIcon :name="focused.role === 'assistant' ? 'bot' : 'user'" />
+              </span>
+            </div>
+            <div class="cex__panebody">{{ focused.content }}</div>
           </div>
         </div>
       </div>
     </section>
 
     <section v-show="step === 'export'" class="cex__panel">
-      <p class="cex__rules-title">书籍信息</p>
-      <label class="cex__metafield">标题<TextField v-model="bookTitle" class="cex__field-grow" /></label>
-      <label class="cex__metafield">作者<TextField v-model="bookAuthor" class="cex__field-grow" placeholder="可留空" /></label>
-      <label class="cex__metafield">语言
-        <Dropdown v-model="bookLang" class="cex__field-grow" :options="LANG_OPTIONS" />
-      </label>
+      <h2 class="cex__title">生成电子书</h2>
+      <p class="cex__lead">填好书籍信息与分章方式，导出 EPUB 或 TXT。</p>
 
-      <p class="cex__rules-title cex__rules-title--mt">章节切分</p>
-      <Dropdown
-        :model-value="chapterRuleKind"
-        :options="CHAPTER_RULE_OPTIONS"
-        @update:model-value="chapterRuleKind = $event as ChapterRuleKind"
-      />
-      <label v-if="chapterRuleKind === 'every'" class="cex__metafield cex__metafield--mt">
-        每章条数<TextField v-model="everyN" type="number" compact min="1" />
-      </label>
+      <Section title="书籍信息" :collapsible="false" size="sm">
+        <label class="cex__metafield">标题<TextField v-model="bookTitle" class="cex__field-grow" /></label>
+        <label class="cex__metafield">作者<TextField v-model="bookAuthor" class="cex__field-grow" placeholder="可留空" /></label>
+        <label class="cex__metafield">语言
+          <Dropdown v-model="bookLang" class="cex__field-grow" :options="LANG_OPTIONS" />
+        </label>
+      </Section>
 
-      <p class="cex__count">共 {{ chapters.length }} 章</p>
-      <ol class="cex__chaplist">
-        <li v-for="ch in chaptersPreview" :key="ch.index" class="cex__chap">
-          <span class="cex__chaptitle">{{ ch.index }}. {{ ch.title }}</span>
-          <span class="cex__chapbody">{{ snippet(ch.body) }}</span>
-        </li>
-      </ol>
-      <p v-if="chapters.length > chaptersPreview.length" class="cex__more">…其余 {{ chapters.length - chaptersPreview.length }} 章</p>
+      <Section title="章节切分" :collapsible="false" size="sm">
+        <Dropdown
+          class="cex__chaprule"
+          :model-value="chapterRuleKind"
+          :options="CHAPTER_RULE_OPTIONS"
+          @update:model-value="chapterRuleKind = $event as ChapterRuleKind"
+        />
+        <p class="cex__hint">{{ chapterRuleHint }}</p>
+        <label v-if="chapterRuleKind === 'every'" class="cex__metafield">
+          每章条数<TextField v-model="everyN" type="number" compact min="1" />
+        </label>
 
-      <div class="cex__exportbtns">
-        <Button icon="download" :disabled="!chapters.length" @click="exportEpub">导出 EPUB</Button>
-        <Button variant="ghost" :disabled="!chapters.length" @click="exportTxt">导出 TXT</Button>
-      </div>
+        <p class="cex__count">共 {{ chapters.length }} 章</p>
+        <ol class="cex__chaplist">
+          <li v-for="ch in chaptersPreview" :key="ch.index" class="cex__chap">
+            <span class="cex__chaptitle">{{ ch.index }}. {{ ch.title }}</span>
+            <span class="cex__chapbody">{{ snippet(ch.body) }}</span>
+          </li>
+        </ol>
+        <p v-if="chapters.length > chaptersPreview.length" class="cex__more">…其余 {{ chapters.length - chaptersPreview.length }} 章</p>
+      </Section>
     </section>
     </div>
 
@@ -602,8 +698,13 @@ async function onDrop(event: DragEvent): Promise<void> {
     <div class="cex__nav">
       <Button v-if="canGoBack" variant="ghost" icon="chevron-left" @click="goPrevStep">上一步</Button>
       <span class="cex__navgap" />
+      <!-- Last step: the export actions take the Next slot (there's no next step). -->
+      <template v-if="step === 'export'">
+        <Button variant="ghost" :disabled="!chapters.length" @click="exportTxt">导出 TXT</Button>
+        <Button icon="download" :disabled="!chapters.length" @click="exportEpub">导出 EPUB</Button>
+      </template>
       <Button
-        v-if="nextStep"
+        v-else-if="nextStep"
         icon-right="chevron-right"
         :disabled="!stepEnabled(nextStep.id)"
         @click="goNextStep"
@@ -869,34 +970,18 @@ async function onDrop(event: DragEvent): Promise<void> {
   color: var(--pet-color-text-muted);
   cursor: pointer;
 }
-.cex__error {
-  margin: var(--pet-space-md) 0 0;
-  font-size: var(--pet-font-size-sm);
-  color: var(--pet-color-accent-text);
-  background: var(--pet-color-danger);
-  padding: var(--pet-space-sm) var(--pet-space-md);
-  border-radius: var(--pet-radius-sm);
-}
 .cex__count {
   margin: var(--pet-space-md) 0 var(--pet-space-sm);
   font-size: var(--pet-font-size-sm);
   font-weight: var(--pet-font-weight-medium);
   color: var(--pet-color-text);
 }
-.cex__rules-title {
+/* Section description — one calm line under a Section header, above its controls. */
+.cex__desc {
   margin: 0 0 var(--pet-space-sm);
-  font-size: var(--pet-font-size-xs);
-  font-weight: var(--pet-font-weight-semibold);
+  font-size: var(--pet-font-size-sm);
+  line-height: var(--pet-font-leading-normal);
   color: var(--pet-color-text-muted);
-}
-.cex__rules-title--mt {
-  margin-top: var(--pet-space-md);
-  padding-top: var(--pet-space-md);
-  border-top: 1px solid var(--pet-color-border);
-}
-/* Sub-label spacing without a divider line (used inside a section). */
-.cex__rules-title--gap {
-  margin-top: var(--pet-space-md);
 }
 /* Scan results — capped height so a long tag list stays scannable, not endless. */
 .cex__scanlist {
@@ -912,70 +997,60 @@ async function onDrop(event: DragEvent): Promise<void> {
   align-items: center;
   gap: var(--pet-space-sm);
   padding: var(--pet-space-xs) var(--pet-space-sm);
-  cursor: pointer;
 }
 .cex__scanrow:not(:last-child) {
   border-bottom: 1px solid var(--pet-color-border);
 }
-.cex__scancheck {
-  flex: none;
+/* Clickable select area — mark + tag + count toggle row selection; takes the row width
+   so the Segmented sits at the right. `min-width: 0` lets a long tag truncate (mobile). */
+.cex__scanpick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--pet-space-sm);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
 }
 .cex__scantag {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--pet-font-mono);
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text);
 }
 .cex__scancount {
-  flex: 1;
+  flex: none;
   font-size: var(--pet-font-size-xxs);
   color: var(--pet-color-text-faint);
 }
-/* Batch bar — apply one bucket to every selected tag (preset-console edit-bar pattern). */
-.cex__scanbatch {
+.cex__scanall {
+  flex: none;
+}
+.cex__scanall-label {
+  font-size: var(--pet-font-size-xs);
+  color: var(--pet-color-text-muted);
+}
+/* Scanner header row — holds the description, swapped in-place for the batch control
+   once tags are selected. Fixed min-height so the swap never shifts the list below. */
+.cex__scanhead {
   display: flex;
   align-items: center;
   gap: var(--pet-space-sm);
-  margin-top: var(--pet-space-sm);
-  padding: var(--pet-space-sm);
-  border: 1px solid var(--pet-color-border);
-  border-radius: var(--pet-radius-sm);
-  background: var(--pet-color-surface-raised);
+  min-height: 26px;
+}
+.cex__scanhead .cex__desc {
+  margin: 0;
 }
 .cex__scanbatch-count {
   flex: 1;
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text-muted);
-}
-.cex__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--pet-space-sm);
-  margin-top: var(--pet-space-sm);
-}
-.cex__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--pet-space-xs);
-  padding: 2px 2px 2px var(--pet-space-sm);
-  font-family: var(--pet-font-mono);
-  font-size: var(--pet-font-size-xs);
-  color: var(--pet-color-text);
-  background: var(--pet-color-surface-raised);
-  border: 1px solid var(--pet-color-border);
-  border-radius: var(--pet-radius-pill);
-}
-/* Shrink the shared IconButton to chip scale (default is 24px). */
-.cex__chip .cex__chip-x {
-  width: 18px;
-  height: 18px;
-}
-.cex__add {
-  display: flex;
-  gap: var(--pet-space-sm);
-  margin-top: var(--pet-space-sm);
-}
-.cex__add :deep(.pet-field) {
-  flex: 1;
 }
 .cex__hint {
   margin: var(--pet-space-sm) 0 0;
@@ -1008,39 +1083,68 @@ async function onDrop(event: DragEvent): Promise<void> {
   color: var(--pet-color-accent-text);
   background: var(--pet-color-danger);
 }
+/* No extra top margin — the step lead's bottom margin already sets the gap, matching
+   the other steps (was double-spaced). */
 .cex__preview {
-  margin-top: var(--pet-space-md);
+  margin-top: 0;
 }
 .cex__pvnav {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--pet-space-sm);
-  margin-bottom: var(--pet-space-sm);
+  margin-bottom: var(--pet-space-md);
 }
 .cex__pvpos {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pet-space-xs);
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text-muted);
+}
+/* Jump-to field inside the position label — narrow, centered (overrides .pet-field width). */
+.cex__pvpos :deep(.cex__pvinput) {
+  width: 44px;
+  padding: 2px var(--pet-space-xs);
+  text-align: center;
 }
 .cex__pvfilter {
   margin-left: auto;
   font-size: var(--pet-font-size-xs);
 }
-.cex__meta {
+/* Pane header — label on the left, badges/role on the right. */
+.cex__pvhead {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--pet-space-sm);
+  margin-bottom: 4px;
 }
+.cex__pvhead-tags,
+.cex__pvhead-name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pet-space-xs);
+  min-width: 0;
+}
+.cex__pvhead-tags {
+  margin-left: auto;
+}
+/* Role badge — an icon chip (bot / user) at the right of the 原文 pane header. */
 .cex__role {
+  display: grid;
+  place-items: center;
   flex: none;
-  min-width: 64px;
-  text-align: center;
-  padding: 1px 6px;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
   border-radius: var(--pet-radius-pill);
-  font-size: var(--pet-font-size-xxs);
-  text-transform: uppercase;
   color: var(--pet-color-text-muted);
   background: var(--pet-color-surface-raised);
+}
+.cex__role :deep(.pet-icon) {
+  width: 14px;
+  height: 14px;
 }
 .cex__role--assistant {
   color: var(--pet-color-accent-text);
@@ -1057,7 +1161,11 @@ async function onDrop(event: DragEvent): Promise<void> {
 .cex__name {
   flex: none;
   color: var(--pet-color-text);
+  font-size: var(--pet-font-size-xs);
   font-weight: var(--pet-font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cex__diff {
   display: flex;
@@ -1077,8 +1185,10 @@ async function onDrop(event: DragEvent): Promise<void> {
   letter-spacing: 0.04em;
   color: var(--pet-color-text-faint);
 }
+/* Fixed height (not max-height) so the two panes stay put as you flip between a short
+   user turn and a long AI turn — no jumpy resizing. Content scrolls inside. */
 .cex__panebody {
-  max-height: 180px;
+  height: 160px;
   overflow-y: auto;
   padding: var(--pet-space-sm);
   font-size: var(--pet-font-size-xs);
@@ -1103,21 +1213,15 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-size: var(--pet-font-size-sm);
   color: var(--pet-color-text-muted);
 }
-.cex__metafield--mt {
-  margin-top: var(--pet-space-sm);
-}
 /* Field that fills the rest of a 书籍信息 row after its inline label. */
 .cex__field-grow {
   flex: 1;
   min-width: 0;
 }
-/* Standalone chapter-rule dropdown sits below its section title. `flex: none`
-   stops the column from reading Dropdown's `flex-basis: 180px` (a row-context width)
-   as a 180px *height*, which was dropping the open menu far below the trigger. */
-.cex__panel > .pet-dd {
-  flex: none;
-  align-self: stretch;
-  margin-top: var(--pet-space-sm);
+/* Chapter-rule dropdown — full-width inside its section (block flow, no flex hack needed). */
+.cex__chaprule {
+  display: block;
+  width: 100%;
 }
 .cex__chaplist {
   list-style: none;
@@ -1150,11 +1254,5 @@ async function onDrop(event: DragEvent): Promise<void> {
   margin: var(--pet-space-sm) 0 0;
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text-faint);
-}
-.cex__exportbtns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--pet-space-sm);
-  margin-top: var(--pet-space-md);
 }
 </style>

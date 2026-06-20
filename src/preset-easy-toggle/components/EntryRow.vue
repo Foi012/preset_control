@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { affordanceOf, inputValueOf, useConsoleStore } from '../store';
 import type { ResolvedEntry, ResolvedSection } from '../types';
-import SelectMark from './SelectMark.vue';
+import SelectMark from '@/ui/SelectMark.vue';
 
 const props = defineProps<{ section: ResolvedSection; entry: ResolvedEntry; readonly?: boolean }>();
 const consoleStore = useConsoleStore();
