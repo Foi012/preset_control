@@ -1,7 +1,7 @@
 /**
  * Lightweight check for the preset I/O wrapper, driven by an in-memory mock
  * gateway (no SillyTavern). Mirrors the other `*.check.ts` scripts.
- * Run: npx ts-node --transpile-only -P tsconfig.novelizer.json src/preset-easy-toggle/preset-io.check.ts
+ * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/preset-console/preset-io.check.ts
  */
 import { CONFIG_BACKUP_ENTRY_NAME, CONFIG_ENTRY_NAME, defaultConfig, readConfig } from './config';
 import {

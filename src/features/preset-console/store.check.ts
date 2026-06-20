@@ -1,6 +1,6 @@
 /**
  * Lightweight check for mode snapshot store behavior.
- * Run: npx ts-node --transpile-only -P tsconfig.novelizer.json src/preset-easy-toggle/store.check.ts
+ * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/preset-console/store.check.ts
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { CONFIG_ENTRY_NAME, defaultConfig, readConfig, serializeConfig } from './config';

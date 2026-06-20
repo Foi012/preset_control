@@ -1,6 +1,6 @@
 /**
  * Lightweight check for the XHTML templates + TXT output.
- * Run: npx ts-node --transpile-only -P tsconfig.check.json src/chat-export/render.check.ts
+ * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/render.check.ts
  */
 import { bodyToParagraphs, metaLine, chapterXhtml, navXhtml, escapeXml, type BookMeta } from './render';
 import { chaptersToTxt } from './txt';

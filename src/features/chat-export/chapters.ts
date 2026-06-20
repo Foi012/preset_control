@@ -7,7 +7,7 @@
  * (else an auto `第N章`). Other captured fields (time/location/…) become chapter meta.
  */
 import { extractMessage, type ExtractConfig } from './extract';
-import type { NormMessage } from './normalize';
+import type { NormMessage, Role } from './normalize';
 
 export type ChapterRule =
   | { kind: 'per-assistant' } // each AI reply starts a chapter (user turns fold in)
@@ -27,13 +27,19 @@ interface Draft {
   bodies: string[];
   meta: Record<string, string>;
   title: string;
+  lastRole: Role | null;
+}
+
+export interface ChapterBuildOptions {
+  roleDivider?: string;
 }
 
 /** Group extracted messages into chapters by the boundary rule. */
-export function buildChapters(messages: NormMessage[], config: ExtractConfig, rule: ChapterRule): Chapter[] {
+export function buildChapters(messages: NormMessage[], config: ExtractConfig, rule: ChapterRule, options: ChapterBuildOptions = {}): Chapter[] {
   const chapters: Chapter[] = [];
   let cur: Draft | null = null;
   let sinceStart = 0;
+  const roleDivider = options.roleDivider?.trim();
 
   const flush = (): void => {
     if (!cur) return;
@@ -66,10 +72,12 @@ export function buildChapters(messages: NormMessage[], config: ExtractConfig, ru
     }
     if (boundary) {
       flush();
-      cur = { bodies: [], meta: {}, title: '' };
+      cur = { bodies: [], meta: {}, title: '', lastRole: null };
       sinceStart = 0;
     }
+    if (roleDivider && cur!.lastRole && cur!.lastRole !== m.role) cur!.bodies.push(roleDivider);
     cur!.bodies.push(ex.body);
+    cur!.lastRole = m.role;
     sinceStart += 1;
     if (!cur!.title && ex.fields.title) cur!.title = ex.fields.title;
     for (const [k, v] of Object.entries(ex.fields)) {

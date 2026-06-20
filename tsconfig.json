@@ -6,7 +6,8 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@/ui/*": ["./src/shared/ui/*"]
     },
     "moduleDetection": "auto",
     "moduleResolution": "bundler",
@@ -22,6 +23,5 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src", "*.d.ts"],
-  "exclude": ["**/dist/**", "**/node_modules/**"]
+  "exclude": ["**/dist/**", "**/node_modules/**", "src/legacy/**"]
 }
-

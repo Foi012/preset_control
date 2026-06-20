@@ -11,19 +11,25 @@ import IconButton from './IconButton.vue';
 const props = withDefaults(
   defineProps<{
     title: string;
+    open?: boolean | null;
     defaultOpen?: boolean;
     collapsible?: boolean;
     /** `md` (default) = `lg` title for a top-level group; `sm` for sections nested
      *  under a larger page/step title, so the two don't compete (matches egroup__name). */
     size?: 'md' | 'sm';
   }>(),
-  { defaultOpen: true, collapsible: true, size: 'md' },
+  { open: null, defaultOpen: true, collapsible: true, size: 'md' },
 );
-const open = ref(props.defaultOpen);
+const emit = defineEmits<{ 'update:open': [open: boolean] }>();
+const localOpen = ref(props.defaultOpen);
+const currentOpen = computed(() => props.open ?? localOpen.value);
 // A non-collapsible section is always shown (no chevron, header not clickable).
-const shown = computed(() => !props.collapsible || open.value);
+const shown = computed(() => !props.collapsible || currentOpen.value);
 function toggle(): void {
-  if (props.collapsible) open.value = !open.value;
+  if (!props.collapsible) return;
+  const next = !currentOpen.value;
+  if (props.open === null) localOpen.value = next;
+  emit('update:open', next);
 }
 </script>
 
@@ -33,9 +39,9 @@ function toggle(): void {
       <IconButton
         v-if="collapsible"
         class="ui-section__disclosure"
-        :class="{ 'ui-section__disclosure--collapsed': !open }"
+        :class="{ 'ui-section__disclosure--collapsed': !currentOpen }"
         name="chevron-down"
-        :title="open ? '收起' : '展开'"
+        :title="currentOpen ? '收起' : '展开'"
         @click.stop="toggle"
       />
       <span class="ui-section__name">{{ title }}</span>

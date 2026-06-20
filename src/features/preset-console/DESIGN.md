@@ -1,14 +1,14 @@
 # Preset Easy Toggle — design spec
 
 > **Status / handoff (read first)** A Tavern Helper _script_ project (TS, bundled by this repo's webpack). All work
-> lives in this folder: `src/preset-easy-toggle/`.
+> lives in this folder: `src/features/preset-console/`.
 >
 > **Files**
 >
 > - `DESIGN.md` — this spec (locked decisions, parsing rules, data model). Source of truth.
-> - `@/ui/` (`src/ui/`) — **shared design library**, the cross-tool SSOT (see _Design library_ note 2026-06-19).
+> - `@/ui/` (`src/shared/ui/`) — **shared design library**, the cross-tool SSOT (see _Design library_ note 2026-06-19).
 >   `tokens.ts` (design tokens → `--pet-*` CSS vars via `emitCssVars()`) + the shared primitives
->   `Button` / `IconButton` / `ChipButton` / `Segmented` / `Dropdown` / `TextField` / `PetIcon`. `src/ui/` depends on
+>   `Button` / `IconButton` / `ChipButton` / `Segmented` / `Dropdown` / `TextField` / `PetIcon`. `src/shared/ui/` depends on
 >   nothing; both tools depend on it; tools never depend on each other.
 > - `types.ts` — parser + resolved-view types.
 > - `parser.ts` — **done.** Pure: `prompts[] → sections[] + allEntries[]` (region slice, full-preset selectable catalog,
@@ -50,16 +50,16 @@
 >   only in in-use. Buttons use local SVG icons rather than emoji glyphs. Mode tabs + sync button in the panel bar.
 > - `__fixtures__/preset.json` — trimmed real preset, TavernHelper `getPreset` shape.
 > - `*.check.ts` — assertion scripts (no test runner), one per pure/impure module. Run:
->   `npx ts-node --transpile-only -P tsconfig.novelizer.json src/preset-easy-toggle/<file>.check.ts` (counts change as
+>   `npx ts-node --transpile-only -P tsconfig.check.json src/features/preset-console/<file>.check.ts` (counts change as
 >   assertions are added). Build one entry with `BUILD_ENTRY=preset-easy-toggle pnpm build:dev` →
->   `dist/preset-easy-toggle/index.js` (the unrelated `pyq-creater` entry is pre-broken; ignore it).
+>   `dist/preset-easy-toggle-extension/index.js` (the unrelated `pyq-creater` entry is pre-broken; ignore it).
 >
 > **Build order** (see end of file): 1 parser ✓ · 2 config ✓ · 3 preset I/O ✓ · 4 mount shell + trigger ✓ · 5 in-use
 > view ✓ · 6 edit view ✓ · 7 custom grouping ✓ (virtual overlay).
 >
-> **Design library extracted to `src/ui/` (2026-06-19):** The shared primitives + tokens moved out of
-> `preset-easy-toggle/` into a neutral **`src/ui/`** package, imported via the `@/ui/*` alias, so 聊天导出 can reuse them
-> without depending on the preset console (DESIGN boundary preserved: `src/ui/` → nothing; both tools → `src/ui/`;
+> **Design library extracted to `src/shared/ui/` (2026-06-19):** The shared primitives + tokens moved out of
+> `preset-easy-toggle/` into a neutral **`src/shared/ui/`** package, imported via the `@/ui/*` alias, so 聊天导出 can reuse them
+> without depending on the preset console (DESIGN boundary preserved: `src/shared/ui/` → nothing; both tools → `src/shared/ui/`;
 > tools ↛ each other). Moved: `tokens.ts`, `PetIcon`, `IconButton`, `ChipButton`, `Segmented`, `Dropdown`. **New
 > primitives:** `Button` (variants `primary`/`secondary`/`ghost`, sizes `sm`/`md`, optional leading/trailing icon),
 > `TextField` (`mono`/`invalid`/`compact`), and `Section` (generic collapsible — the reusable disclosure behind
@@ -468,7 +468,7 @@ general-purpose tool.
 | Batch editing               | Edit mode always shows per-entry selection checkboxes and per-group select-all/count/action rows. The top `多选` button or any selected checkbox reveals a bottom-floating batch toolbar with select all, selected count, add group, hide/unhide, input/no-input, move-to-group, and search.                                                                                                                                                                                                                                                                                        |
 | Persistence                 | **Auto-save** (debounced): each toggle writes to live `in_use` _and_ the bound preset file on disk, so selections survive leaving/returning. (The reference only auto-applied to `in_use`; disk save was manual — we go one step further.)                                                                                                                                                                                                                                                                                                                                          |
 | Lifetime                    | Script is bound to its preset and disappears on preset switch. No cross-preset machinery.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Build                       | Lives at `src/preset-easy-toggle/` in the template repo (TS + webpack + `@types`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Build                       | Lives at `src/features/preset-console/` in the template repo (TS + webpack + `@types`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ## Group behaviour: three orthogonal axes
 
@@ -766,7 +766,7 @@ Verify: `BUILD_ENTRY=preset-easy-toggle pnpm build` (current prod bundle is larg
 ### TODO
 
 1. Scaffold `manifest.json` (+ `style.css` if not inlined) and an extension entry that mounts the app. **Done in first
-   pass:** `src/preset-easy-toggle-extension/manifest.json` + `native.ts`.
+   pass:** `src/extension/preset-control/manifest.json` + `native.ts`.
 2. Implement `presetGatewayNative()` against `getContext()` / `getPresetManager('openai')`, matching the existing
    `PresetGateway` contract (`read → { prompts, promptsUnused }`, `mutate(edit)`, `persist`). **Confirm the exact calls
    against a real ST checkout** (`public/scripts/openai.js`: `oai_settings`, `promptManager`, `getPresetManager`).

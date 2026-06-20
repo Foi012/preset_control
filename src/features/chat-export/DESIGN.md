@@ -3,12 +3,12 @@
 > **Status / handoff (read first)** A second feature in the `preset_control` repo, shipped as a **toolbox**:
 > the same floating trigger now opens a **launcher** from which the user picks a tool — the existing
 > 预设控制台 (preset console) or this **聊天导出** (chat → EPUB) exporter. The exporter is a self-contained
-> module under `src/chat-export/`; nothing in `src/preset-easy-toggle/` depends on it.
+> module under `src/features/chat-export/`; nothing in `src/features/preset-console/` depends on it.
 >
-> Sibling spec: `src/preset-easy-toggle/DESIGN.md` (preset console — source of truth for that tool).
+> Sibling spec: `src/features/preset-console/DESIGN.md` (preset console — source of truth for that tool).
 >
 > **UI uses the shared design library (`@/ui/*`), 2026-06-19.** The exporter is still self-contained for its *logic*,
-> but its **UI composes the shared primitives** in `src/ui/` — `Button`, `IconButton`, `Segmented`, `TextField`,
+> but its **UI composes the shared primitives** in `src/shared/ui/` — `Button`, `IconButton`, `Segmented`, `TextField`,
 > `Dropdown`, `Section`, `PetIcon` — and the `--pet-*` tokens, so it matches the preset console (the canonical UI
 > reference). No bespoke buttons/inputs/selects live in `ChatExport.vue`; the remaining `.cex__*` classes are layout +
 > feature-specific bits (stepper, drop zone, diff panes, chips, scan list) only. When adding UI, reach for `@/ui/*` first.
@@ -22,14 +22,14 @@
 >   bar + ✓). "Done" = a reachable step before the active one (`stepDone()`).
 > - **① 来源.** A hero drop zone (drag `.jsonl`, or 读取当前聊天 / 导入 buttons) with a `sourceState` machine —
 >   **idle / loading / success / error** — driving the zone icon, border tint, and a status line.
-> - **② 规则.** A non-collapsible **扫描标签** scanner on top, then **包含内容** and **排除内容** `Section`s.
->   **包含内容** = message inclusion (用户/隐藏楼层) + two destination rule rows — **正文** and **标题** — each a
+> - **② 规则.** A collapsible **扫描** scanner on top, then **包含内容** and **排除内容** `Section`s.
+>   **包含内容** = message inclusion (用户/隐藏楼层), optional role-change divider, optional floor range (start/end) for large chats, and two destination rule rows — **标题** then **正文** — each a
 >   reusable `RuleField.vue` (labelled add-row + chips below). **排除内容** = strip presets (think/OOC) + custom
 >   exclude rules (one `RuleField`). The scanner lists chat tags (capped, scrollable, multi-select; batch bar reuses the
 >   row's `Segmented`) and routes each to **不处理 / 排除 / 包含**. A rule lives in **one destination only** (排除 /
 >   正文 / 标题), enforced by `pinRule` (cross-clears the other two) and `setTagBucket`. Rows + a **全选** master use the
 >   shared `SelectMark` (on/off/partial), mirroring the preset console; the header swaps the **全选** row for the batch
->   `Segmented` once tags are selected (no layout shift). A **清除** badge button wipes every routed tag/rule on the page
+>   `Segmented` once tags are selected (no layout shift). A footer **清除规则** text action wipes every routed tag/rule on the page
 >   (`clearAllRules`). `SelectMark` was promoted from `preset-easy-toggle/components` to **`@/ui`** so chat-export reuses
 >   it without depending on the preset module (keeps the boundary clean).
 >   **Vocabulary** (drops the old 提取 collision): **正文** (body) · **标题** (title) · **排除** (exclude) · **不处理**.
@@ -43,7 +43,7 @@
 >   `size="sm"` (Section's nested variant — `sm` title) so they sit clearly **under** the step title, not competing.
 >   ④ groups 书籍信息 / 章节切分 in `Section`s; each 章节切分 option carries a one-line `hint` (e.g. per-assistant folds
 >   user turns into the AI chapter). The **导出 EPUB / TXT** actions live in the fixed footer (`.cex__nav`) on ④,
->   taking the place of 下一步. ③ shows **清理后 above 原文** (result first); the 原文 pane header is card name (+ 隐藏
+>   taking the place of 下一步. ④ book info supports an optional uploaded cover; the image is resized through canvas and embedded as `OEBPS/cover.jpg` to avoid unbounded EPUB size. ③ shows **清理后 above 原文** (result first); the 原文 pane header is card name (+ 隐藏
 >   badge) left, a **bot / user role icon** right, and a number field in the nav jumps straight to any message.
 > - **Rule scope.** 排除 applies to **every** message; 正文/标题 apply to **assistant** turns only (`extractMessage`).
 >   Body tags (`正文`/`body`/`content`/`text`) and unnamed matches become the chapter **body**; other tags / named
@@ -93,7 +93,7 @@ Required OPF metadata: `dc:title`, `dc:identifier` (UUID), `dc:language`. Recomm
 (author). Everything else (cover, date, description) is optional and deferred. **User-facing knobs are only
 title / author / language + the per-chapter regex mapping**; the rest is generated.
 
-## Module layout (`src/chat-export/`)
+## Module layout (`src/features/chat-export/`)
 
 ```
 DESIGN.md           — this spec

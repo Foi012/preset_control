@@ -1,6 +1,6 @@
 /**
  * Lightweight check for the tag scanner.
- * Run: npx ts-node --transpile-only -P tsconfig.check.json src/chat-export/scan.check.ts
+ * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/scan.check.ts
  */
 import { scanTags } from './scan';
 

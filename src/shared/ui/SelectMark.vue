@@ -7,11 +7,18 @@
  */
 import PetIcon from '@/ui/PetIcon.vue';
 
-defineProps<{ type: 'radio' | 'checkbox'; state: 'on' | 'off' | 'partial' }>();
+withDefaults(
+  defineProps<{
+    type: 'radio' | 'checkbox';
+    state: 'on' | 'off' | 'partial';
+    size?: 'md' | 'sm';
+  }>(),
+  { size: 'md' },
+);
 </script>
 
 <template>
-  <span class="pet-mark" :class="[`pet-mark--${type}`, `pet-mark--${state}`]">
+  <span class="pet-mark" :class="[`pet-mark--${type}`, `pet-mark--${state}`, `pet-mark--${size}`]">
     <PetIcon v-if="type === 'checkbox' && state === 'on'" name="check" />
   </span>
 </template>
@@ -32,6 +39,11 @@ defineProps<{ type: 'radio' | 'checkbox'; state: 'on' | 'off' | 'partial' }>();
     background var(--pet-motion-fast) var(--pet-motion-ease),
     border-color var(--pet-motion-fast) var(--pet-motion-ease),
     box-shadow var(--pet-motion-fast) var(--pet-motion-ease);
+}
+.pet-mark--sm {
+  width: 14px;
+  height: 14px;
+  border-width: 1.5px;
 }
 .pet-mark--radio {
   border-radius: var(--pet-radius-pill);
@@ -57,9 +69,16 @@ defineProps<{ type: 'radio' | 'checkbox'; state: 'on' | 'off' | 'partial' }>();
   border-radius: 1px;
   background: var(--pet-color-accent);
 }
+.pet-mark--sm.pet-mark--checkbox.pet-mark--partial::after {
+  width: 6px;
+}
 .pet-mark :deep(.pet-icon) {
   width: 12px;
   height: 12px;
   stroke-width: 3;
+}
+.pet-mark--sm :deep(.pet-icon) {
+  width: 10px;
+  height: 10px;
 }
 </style>
