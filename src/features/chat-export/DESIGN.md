@@ -53,17 +53,15 @@
 >   / 清理后为空 (N) / 未匹配 (N), the two flag scopes appearing only when they have instances — so the existing prev/next
 >   walk covers all instances of one kind without round-trips. Clearing a scope's instances via rule edits auto-falls
 >   back to 全部. The focused 清理后 pane shows a per-message **空** / **未匹配** badge.
-> - **Jump-to-ST (2026-06-20).** Some flags can't be fixed by a rule (a one-off garbled message) — so the 原文 pane has
->   an **edit** IconButton (active-chat source only; a `.jsonl` import has no live message) that locates the message in
->   SillyTavern for hand-editing. `NormMessage.srcIndex` carries the **source array position** (== ST `mesid` for the
->   active source) through normalize, surviving the range slice. `jumpToStMessage` resolves ST's document (native = our
->   own `document`; iframe = `parent.document`), then — since ST lazy-renders only recent messages behind a
->   `#show_more_messages` button — clicks that button (with a tick between each) until `.mes[mesid=N]` renders, scrolls
->   to it, and flashes a highlight. The load-more step **triggers the button via jQuery** (`win.jQuery(...).trigger`,
->   the way ST binds it — a bare `.click()` gets ignored mid-load) and **waits for `.mes` count to grow** before the
->   next click, instead of firing rapid clicks. Reached from a ghost **在 ST 中定位** footer button on ③ (active-chat
->   source only) acting on the focused message. Best-effort + ST-DOM-dependent: on failure it logs DOM diagnostics and
->   shows a `jumpError` line.
+> - **Jump-to-ST (2026-06-20).** Some flags can't be fixed by a rule (a one-off garbled message) — so a ghost **在 ST
+>   中定位** footer button on ③ (active-chat source only; a `.jsonl` import has no live message) locates the focused
+>   message in SillyTavern for hand-editing. `NormMessage.srcIndex` carries the **source array position** (== ST `mesid`
+>   for the active source) through normalize, surviving the range slice. `jumpToStMessage` resolves ST's document
+>   (native = our own `document`; iframe = `parent.document`) and scrolls/flashes `.mes[mesid=N]`. **ST collapses older
+>   messages behind a "Show more messages" button**, so a target above it isn't in the DOM; auto-expanding proved
+>   unreliable (rapid clicks ignored mid-load; the wait loop hung), so we **don't auto-expand** — jump if rendered, else
+>   show a `jumpError` asking the user to expand earlier messages first. The 清理后 header shows the message's **floor
+>   number** (`#srcIndex`) so they know how far to expand.
 > - **Rule scope.** 排除 applies to **every** message; 正文/标题 apply to **assistant** turns only (`extractMessage`).
 >   Body tags (`正文`/`body`/`content`/`text`) and unnamed matches become the chapter **body**; other tags / named
 >   regex groups (e.g. `(?<title>…)`) become labelled **fields** (chapter metadata like title).

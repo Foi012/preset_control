@@ -311,64 +311,38 @@ function setNavScope(scope: string): void {
 // messages; older ones sit behind a #show_more_messages button, so we click it (with a
 // tick between each) until the target mesid renders, then scroll + flash it.
 const jumpError = ref('');
-interface StWindow extends Window {
-  SillyTavern?: unknown;
-  jQuery?: (sel: string | Element) => { length: number; trigger: (event: string) => void };
-}
-function stWindow(): StWindow | null {
-  const w = window as unknown as StWindow & { parent?: StWindow };
-  if (w.SillyTavern) return w; // native mount — we're in ST's page
-  if (w.parent?.SillyTavern) return w.parent; // iframe mount — ST is the parent
+function stDocument(): Document | null {
+  const w = window as unknown as { SillyTavern?: unknown; parent?: { SillyTavern?: unknown; document?: Document } };
+  if (w.SillyTavern) return document; // native mount — we're in ST's page
+  if (w.parent?.SillyTavern) return w.parent.document ?? null; // iframe mount — ST is the parent
   return null;
 }
-const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
-async function jumpToStMessage(srcIndex: number): Promise<void> {
+/**
+ * Scroll ST to a message and flash it. ST collapses older messages behind a
+ * "Show more messages" button, so a target above it isn't in the DOM. Auto-expanding
+ * proved unreliable; instead we jump if it's rendered, else ask the user to expand
+ * (the 清理后 header shows the floor number so they know how far to go).
+ */
+function jumpToStMessage(srcIndex: number): void {
   jumpError.value = '';
-  const win = stWindow();
-  const doc = win?.document;
+  const doc = stDocument();
   if (!doc) {
     jumpError.value = '未能连接到 SillyTavern。';
     return;
   }
-  // Not scoped to #chat in case the container id differs across ST versions.
-  const find = (): HTMLElement | null => doc.querySelector(`.mes[mesid="${srcIndex}"]`);
-  const showMore = (): HTMLElement | null => doc.querySelector('#show_more_messages');
-
-  for (let i = 0; i < 60 && !find(); i++) {
-    const more = showMore();
-    if (!more) break; // nothing older left to reveal
-    const before = doc.querySelectorAll('.mes').length;
-    // ST binds the handler via jQuery; trigger it that way (a bare .click() can be
-    // ignored mid-load), then wait until the batch actually renders before clicking again.
-    if (win?.jQuery && win.jQuery('#show_more_messages').length) win.jQuery('#show_more_messages').trigger('click');
-    else more.click();
-    for (let w = 0; w < 30; w++) {
-      await sleep(100);
-      if (find() || doc.querySelectorAll('.mes').length > before) break;
-    }
-  }
-
-  const el = find();
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const prev = el.style.backgroundColor;
-    el.style.transition = 'background-color 0.4s';
-    el.style.backgroundColor = 'rgba(255, 196, 0, 0.28)';
-    setTimeout(() => {
-      el.style.backgroundColor = prev;
-    }, 1400);
+  const el = doc.querySelector(`.mes[mesid="${srcIndex}"]`) as HTMLElement | null;
+  if (!el) {
+    jumpError.value = `第 ${srcIndex} 层未在 ST 中显示，可能被「Show more messages」折叠——请在 ST 里点开较早的消息后再试。`;
     return;
   }
-  const sample = doc.querySelector('.mes') as HTMLElement | null;
-  console.warn('[chat-export] jump-to-ST failed', {
-    targetMesid: srcIndex,
-    mesCount: doc.querySelectorAll('.mes').length,
-    hasShowMore: !!showMore(),
-    usedJquery: !!win?.jQuery,
-    sampleMesAttrs: sample ? sample.getAttributeNames() : null,
-  });
-  jumpError.value = '未能在 ST 中定位该消息。请打开浏览器控制台（F12）把 [chat-export] 的诊断信息发我。';
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const prev = el.style.backgroundColor;
+  el.style.transition = 'background-color 0.4s';
+  el.style.backgroundColor = 'rgba(255, 196, 0, 0.28)';
+  setTimeout(() => {
+    el.style.backgroundColor = prev;
+  }, 1400);
 }
 // If rule edits make the current scope vanish (e.g. all empties fixed), fall back to 全部.
 watch(navScopeOptions, opts => {
@@ -959,7 +933,7 @@ async function onDrop(event: DragEvent): Promise<void> {
           <!-- After first — the result the user is verifying. -->
           <div class="cex__pane">
             <div class="cex__pvhead">
-              <span class="cex__panelabel">清理后</span>
+              <span class="cex__panelabel">清理后<span class="cex__floor" title="该消息在原聊天中的楼层号">#{{ focused.srcIndex }}</span></span>
               <span class="cex__pvhead-tags">
                 <span v-for="(val, key) in focusedExtract.fields" :key="key" class="cex__field">{{ key }}: {{ val }}</span>
                 <span v-if="!focusedExtract.body.trim()" class="cex__nomatch" title="清理后为空，不会写入电子书">空</span>
@@ -1116,7 +1090,6 @@ async function onDrop(event: DragEvent): Promise<void> {
       <Button
         v-if="step === 'preview' && sourceKind === 'active'"
         variant="ghost"
-        icon="edit"
         :disabled="!focused"
         @click="focused && jumpToStMessage(focused.srcIndex)"
       >在 ST 中定位</Button>
@@ -1657,6 +1630,13 @@ async function onDrop(event: DragEvent): Promise<void> {
 .cex__jumperror {
   margin-bottom: var(--pet-space-sm);
   color: var(--pet-color-danger);
+}
+/* Floor number beside 清理后 — tells the user which ST message this is. */
+.cex__floor {
+  margin-left: var(--pet-space-xs);
+  font-size: var(--pet-font-size-xxs);
+  font-weight: var(--pet-font-weight-normal);
+  color: var(--pet-color-text-muted);
 }
 /* Pane header — label on the left, badges/role on the right. */
 .cex__pvhead {
