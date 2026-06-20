@@ -47,7 +47,7 @@ function onPointerCancel(event: PointerEvent): void {
 <template>
   <button
     class="pet-trigger"
-    title="预设控制台"
+    title="生鱼片工具箱"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
