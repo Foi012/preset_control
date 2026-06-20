@@ -5,6 +5,7 @@
  * don't choke.
  */
 import type { Chapter } from './chapters';
+import type { ResolvedRule } from './style';
 
 export interface BookMeta {
   title: string;
@@ -27,13 +28,62 @@ export function escapeXml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-/** Body text → escaped `<p>` blocks (split on blank lines; single newlines → `<br/>`). */
-export function bodyToParagraphs(body: string): string {
+/** Escape, then turn single newlines into `<br/>` — the leaf transform for plain text. */
+function escapeBr(s: string): string {
+  return escapeXml(s).replace(/\n/g, '<br/>');
+}
+
+/**
+ * Apply styling rules to one paragraph, returning XHTML-safe inner HTML.
+ *
+ * Tokenizer: start with the whole paragraph as one text token; each rule splits text
+ * tokens into escaped text + `<span class>`-wrapped matches (group 1 if present, else
+ * the whole match), leaving already-wrapped tokens untouched so we never re-match inside
+ * a span. Non-overlapping, rule-order priority. The only HTML emitted is our own span
+ * around escaped content — never user HTML.
+ */
+export function decorateInline(text: string, rules: ResolvedRule[]): string {
+  type Tok = { html: false; s: string } | { html: true; s: string };
+  let toks: Tok[] = [{ html: false, s: text }];
+  for (const rule of rules) {
+    const re = new RegExp(rule.re.source, rule.re.flags.includes('g') ? rule.re.flags : `${rule.re.flags}g`);
+    const next: Tok[] = [];
+    for (const tok of toks) {
+      if (tok.html) {
+        next.push(tok);
+        continue;
+      }
+      const s = tok.s;
+      let last = 0;
+      let m: RegExpExecArray | null;
+      re.lastIndex = 0;
+      while ((m = re.exec(s))) {
+        if (m[0] === '') {
+          re.lastIndex++;
+          continue;
+        }
+        if (m.index > last) next.push({ html: false, s: s.slice(last, m.index) });
+        const inner = m[1] ?? m[0];
+        next.push({ html: true, s: `<span class="${rule.className}">${escapeBr(inner)}</span>` });
+        last = m.index + m[0].length;
+      }
+      if (last < s.length) next.push({ html: false, s: s.slice(last) });
+    }
+    toks = next;
+  }
+  return toks.map(tok => (tok.html ? tok.s : escapeBr(tok.s))).join('');
+}
+
+/**
+ * Body text → escaped `<p>` blocks (split on blank lines; single newlines → `<br/>`).
+ * With styling `rules`, each paragraph's inner text is decorated with `<span class>`s.
+ */
+export function bodyToParagraphs(body: string, rules: ResolvedRule[] = []): string {
   return body
     .split(/\n{2,}/)
     .map(p => p.trim())
     .filter(Boolean)
-    .map(p => `<p>${escapeXml(p).replace(/\n/g, '<br/>')}</p>`)
+    .map(p => `<p>${rules.length ? decorateInline(p, rules) : escapeBr(p)}</p>`)
     .join('\n');
 }
 
@@ -43,8 +93,8 @@ export function metaLine(meta: Record<string, string>): string {
   return parts.length ? `<p class="meta">${parts.map(escapeXml).join(' · ')}</p>` : '';
 }
 
-/** One chapter → a full XHTML document. */
-export function chapterXhtml(ch: Chapter, meta: BookMeta): string {
+/** One chapter → a full XHTML document. `rules` style the body inline (default: none). */
+export function chapterXhtml(ch: Chapter, meta: BookMeta, rules: ResolvedRule[] = []): string {
   const lang = escapeXml(meta.language || 'zh');
   return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
@@ -58,7 +108,7 @@ export function chapterXhtml(ch: Chapter, meta: BookMeta): string {
 <section class="chapter">
 <h1>${escapeXml(ch.title)}</h1>
 ${metaLine(ch.meta)}
-${bodyToParagraphs(ch.body)}
+${bodyToParagraphs(ch.body, rules)}
 </section>
 </body>
 </html>`;

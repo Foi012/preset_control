@@ -48,6 +48,30 @@
 > - **Rule scope.** 排除 applies to **every** message; 正文/标题 apply to **assistant** turns only (`extractMessage`).
 >   Body tags (`正文`/`body`/`content`/`text`) and unnamed matches become the chapter **body**; other tags / named
 >   regex groups (e.g. `(?<title>…)`) become labelled **fields** (chapter metadata like title).
+>
+> **排版样式 — typography presets + advanced CSS/regex (2026-06-20).** ④ 导出 gains a **排版样式** `Section` that
+> styles the EPUB/HTML body. Tiered by audience (the toolbox's users mostly don't code):
+> - **Tier 1 — presets (surfaced first).** A short list of one-click toggles, each a built-in regex→`<span class>` rule
+>   **plus** its CSS, wired under the hood so the user never writes either. Shipped presets (`STYLE_PRESETS` in
+>   `style.ts`): **加粗对话** (`"…"`/`「…」`/`“…”`/`«…»` → `.st-dialogue` bold), **星号转倾斜** (`*…*` → `.st-emphasis`
+>   italic, markers dropped via the capture group), **段首下沉首字** (CSS-only `::first-letter` drop cap, no rule).
+> - **Tier 2 — advanced (collapsed `高级` disclosure).** The raw escape hatch: custom **匹配 → 类名** rule rows (a
+>   two-field add-row; pattern is a tag or `/regex/flags`, class name is sanitized to `[A-Za-z0-9_-]`) + a free **自定义
+>   CSS** textarea appended to the stylesheet. So a power user can ship a class we didn't, but everyone else just checks
+>   boxes.
+> - **Engine (`style.ts`, pure + `style.check.ts`).** `StyleConfig { presets[]; rules[]; css }`. `resolveStyleRules`
+>   compiles enabled presets' rules + custom rules into `ResolvedRule { re, className }` (skips invalid regex, never
+>   throws); `buildStyleCss` concatenates enabled-preset CSS + custom CSS (appended to `BOOK_CSS`). The **decoration**
+>   lives in `render.ts` (`bodyToParagraphs(body, rules)` → per-paragraph `decorateInline`) to avoid a render↔style
+>   cycle: a **tokenizer** escapes unmatched text and wraps each match's group-1 (else whole match) in
+>   `<span class="cls">`, never re-matching inside an already-wrapped span (non-overlapping, rule-order priority). The
+>   only HTML ever emitted is our own `<span class>` around **escaped** content — no user HTML injection — so output
+>   stays valid XHTML (the `xmllint`/缺层 guard the reference script lacks). `txt.ts` ignores styling (plain text).
+> - **Dark-mode caveat.** Presets default to `font-weight`/`font-style` (theme-safe); hardcoded `color` can vanish in a
+>   reader's night theme, so colored styling is left to the advanced CSS field, not a default preset.
+> - **Deferred:** a *styled* (rendered) preview in ③/④ — needs the preset CSS injected into the panel's shadow root;
+>   for now the preview stays plain text and the effect is verified in the exported file. Markdown rendering is a
+>   separate, larger follow-up (needs a conservative MD parser).
 
 ## Why this lives here (toolbox decision)
 
@@ -74,6 +98,7 @@ grows; for now it ships in the single `index.js` (see _Bundling_).
 | Output | **EPUB** via a **dependency-free store-method ZIP writer** (`epub.ts` — no JSZip; `mimetype` stored first, then `META-INF/container.xml`, `OEBPS/content.opf`, `toc.ncx`, `nav.xhtml`, `style.css`, per-chapter XHTML). **TXT** as a cheap second target. Validated end-to-end with `unzip`/`xmllint`; open in Apple Books + Calibre. |
 | Config store | Rule set (strip toggles, exclude/include rules, chapter rule) persists to **localStorage** under one `cexRules` key (last-used). Per-card/chat keying + book-meta persistence is a refinement. |
 | Bundling | **Single `index.js`** — no extra deps (the store-ZIP writer kept JSZip out). Module boundary stays clean for a future lazy-split. |
+| Typography | **Tiered styling on ④** (see 2026-06-20 log): a shortlist of one-click **presets** (each a built-in regex→`<span class>` + CSS) surfaced first; a collapsed **高级** disclosure holds custom 匹配→类名 rules + a free CSS textarea. Engine in `style.ts` (pure); decoration in `render.ts` only emits our own `<span class>` around escaped text (no user HTML), so output stays valid XHTML. TXT is unstyled. |
 
 ## EPUB anatomy (what an EPUB actually needs)
 
@@ -103,6 +128,7 @@ normalize.ts        — RawMessage[] → NormMessage { index, role, name, conten
 extract.ts          — strip toggles + named-group regex → mapped fields; regex validation (pure)
 chapters.ts         — chapter-trigger split → Chapter { title, meta, html }      (pure)
 epub.ts             — Chapter[] + BookMeta → Blob (JSZip)        ;  txt.ts — Chapter[] → string
+style.ts            — typography model: StyleConfig, STYLE_PRESETS, resolveStyleRules, buildStyleCss (pure)
 store.ts            — Pinia store for export config + derived preview (per-card localStorage)
 ChatExport.vue      — the tool root (source → config → preview → export), mounted by the shell
 components/         — source picker, regex/mapping form, preview pane, export bar

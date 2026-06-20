@@ -1,0 +1,65 @@
+/**
+ * Lightweight check for the typography engine + inline decoration.
+ * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/style.check.ts
+ */
+import { resolveStyleRules, buildStyleCss, sanitizeClassName, emptyStyleConfig, type StyleConfig } from './style';
+import { bodyToParagraphs, decorateInline } from './render';
+
+let failures = 0;
+function check(label: string, actual: unknown, expected: unknown) {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  if (!ok) failures++;
+  console.log(`${ok ? '✓' : '✗'} ${label}${ok ? '' : `  expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`}`);
+}
+
+// --- class sanitizing ------------------------------------------------------
+check('sanitizeClassName strips junk', sanitizeClassName(' my .cls<x>! '), 'myclsx');
+check('sanitizeClassName keeps hyphen/underscore', sanitizeClassName('st-my_cls'), 'st-my_cls');
+check('sanitizeClassName empty → fallback', sanitizeClassName('  «»  '), 'st-custom');
+
+// --- resolveStyleRules -----------------------------------------------------
+check('no config → no rules', resolveStyleRules(emptyStyleConfig()).length, 0);
+const dialogueOnly: StyleConfig = { presets: ['dialogue'], rules: [], css: '' };
+check('dialogue preset resolves to one rule', resolveStyleRules(dialogueOnly).length, 1);
+check('dialogue rule class', resolveStyleRules(dialogueOnly)[0].className, 'st-dialogue');
+check('css-only preset (dropcap) yields no rule', resolveStyleRules({ presets: ['dropcap'], rules: [], css: '' }).length, 0);
+check('invalid custom regex is skipped, never throws', resolveStyleRules({ presets: [], rules: [{ pattern: '/(/', className: 'x' }], css: '' }).length, 0);
+check(
+  'preset + custom rule order (presets first)',
+  resolveStyleRules({ presets: ['dialogue'], rules: [{ pattern: '/foo/', className: 'bar' }], css: '' }).map(r => r.className),
+  ['st-dialogue', 'bar'],
+);
+
+// --- buildStyleCss ---------------------------------------------------------
+check('enabled preset css included', buildStyleCss(dialogueOnly).includes('.st-dialogue'), true);
+check('disabled preset css excluded', buildStyleCss(emptyStyleConfig()).includes('.st-dialogue'), false);
+check('dropcap css included when on', buildStyleCss({ presets: ['dropcap'], rules: [], css: '' }).includes('::first-letter'), true);
+check('custom css appended', buildStyleCss({ presets: [], rules: [], css: '.x{color:red}' }).includes('.x{color:red}'), true);
+
+// --- decorateInline --------------------------------------------------------
+check('no rules → plain escape parity', decorateInline('<a>&"', []), '&lt;a&gt;&amp;&quot;');
+const dRules = resolveStyleRules(dialogueOnly);
+check(
+  'dialogue wraps quoted span incl. quotes',
+  decorateInline('他说"你好"。', dRules),
+  '他说<span class="st-dialogue">&quot;你好&quot;</span>。',
+);
+check('plain text outside a match is escaped', decorateInline('<x> "hi"', dRules), '&lt;x&gt; <span class="st-dialogue">&quot;hi&quot;</span>');
+const eRules = resolveStyleRules({ presets: ['emphasis'], rules: [], css: '' });
+check('emphasis wraps group 1 and drops markers', decorateInline('看 *重点* 哦', eRules), '看 <span class="st-emphasis">重点</span> 哦');
+check(
+  'two rules do not re-match inside an existing span',
+  decorateInline('"*x*"', resolveStyleRules({ presets: ['dialogue', 'emphasis'], rules: [], css: '' })),
+  '<span class="st-dialogue">&quot;*x*&quot;</span>',
+);
+
+// --- bodyToParagraphs threading rules --------------------------------------
+check(
+  'bodyToParagraphs decorates each paragraph',
+  bodyToParagraphs('他说"嗨"\n\n下一段', dRules),
+  '<p>他说<span class="st-dialogue">&quot;嗨&quot;</span></p>\n<p>下一段</p>',
+);
+check('bodyToParagraphs with no rules unchanged', bodyToParagraphs('上\n下', []), '<p>上<br/>下</p>');
+
+console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
+if (failures > 0) process.exit(1);
