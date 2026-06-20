@@ -37,6 +37,7 @@ pnpm check:chat-extract      # 提取 / 排除规则
 pnpm check:chat-scan         # 标签扫描
 pnpm check:chat-chapters     # 章节切分
 pnpm check:chat-render       # XHTML 渲染
+pnpm check:chat-style        # 排版样式（预设 + 自定义规则/CSS）
 pnpm check:chat-epub         # EPUB 打包
 pnpm build
 ```

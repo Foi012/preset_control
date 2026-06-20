@@ -15,6 +15,7 @@
     "check:chat-scan": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/scan.check.ts",
     "check:chat-chapters": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/chapters.check.ts",
     "check:chat-render": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/render.check.ts",
+    "check:chat-style": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/style.check.ts",
     "check:chat-epub": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/epub.check.ts"
   },
   "browserslist": [

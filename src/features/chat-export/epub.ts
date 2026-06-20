@@ -10,6 +10,7 @@
  */
 import type { Chapter } from './chapters';
 import { BOOK_CSS, chapterXhtml, escapeXml, navXhtml, type BookMeta } from './render';
+import { buildStyleCss, resolveStyleRules, type StyleConfig } from './style';
 
 interface ZipEntry {
   name: string;
@@ -155,11 +156,15 @@ ${points}
 </ncx>`;
 }
 
-/** Assemble chapters + metadata into EPUB bytes. */
-export function buildEpub(chapters: Chapter[], meta: BookMeta): Uint8Array {
+/** Assemble chapters + metadata into EPUB bytes. `style` adds typography (presets + custom CSS). */
+export function buildEpub(chapters: Chapter[], meta: BookMeta, style?: StyleConfig): Uint8Array {
   const enc = new TextEncoder();
   const id = uuid();
   const text = (name: string, content: string): ZipEntry => ({ name, data: enc.encode(content) });
+
+  const rules = style ? resolveStyleRules(style) : [];
+  const styleCss = style ? buildStyleCss(style) : '';
+  const css = styleCss ? `${BOOK_CSS}\n${styleCss}\n` : BOOK_CSS;
 
   const entries: ZipEntry[] = [
     text('mimetype', 'application/epub+zip'), // MUST be first + stored
@@ -167,9 +172,9 @@ export function buildEpub(chapters: Chapter[], meta: BookMeta): Uint8Array {
     text('OEBPS/content.opf', contentOpf(chapters, meta, id)),
     text('OEBPS/nav.xhtml', navXhtml(chapters, meta, chapterHref)),
     text('OEBPS/toc.ncx', tocNcx(chapters, meta, id)),
-    text('OEBPS/style.css', BOOK_CSS),
+    text('OEBPS/style.css', css),
     ...(meta.cover ? [{ name: `OEBPS/${meta.cover.href}`, data: meta.cover.data }] : []),
-    ...chapters.map(ch => text(`OEBPS/${chapterHref(ch)}`, chapterXhtml(ch, meta))),
+    ...chapters.map(ch => text(`OEBPS/${chapterHref(ch)}`, chapterXhtml(ch, meta, rules))),
   ];
   return zipStore(entries);
 }

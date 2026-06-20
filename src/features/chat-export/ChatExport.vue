@@ -26,6 +26,7 @@ import { buildChapters, type ChapterRule } from './chapters';
 import { chaptersToTxt } from './txt';
 import { buildEpub } from './epub';
 import type { BookMeta } from './render';
+import { STYLE_PRESETS, type StyleConfig, type StyleRule } from './style';
 
 const messages = ref<NormMessage[]>([]);
 const sourceLabel = ref('');
@@ -274,6 +275,35 @@ type ChapterRuleKind = 'per-assistant' | 'per-message' | 'title' | 'every';
 const chapterRuleKind = ref<ChapterRuleKind>('per-assistant');
 const everyN = ref(5);
 
+// Typography (排版样式) — tiered: one-click presets first, advanced custom rules + CSS behind a disclosure.
+const stylePresets = ref<string[]>([]);
+const styleRules = ref<StyleRule[]>([]);
+const stylePatternDraft = ref('');
+const styleClassDraft = ref('');
+const styleCss = ref('');
+const styleConfig = computed<StyleConfig>(() => ({
+  presets: stylePresets.value,
+  rules: styleRules.value,
+  css: styleCss.value,
+}));
+const stylePatternError = computed(() => ruleError(stylePatternDraft.value));
+
+function togglePreset(id: string): void {
+  const i = stylePresets.value.indexOf(id);
+  if (i >= 0) stylePresets.value.splice(i, 1);
+  else stylePresets.value.push(id);
+}
+function addStyleRule(): void {
+  const pattern = stylePatternDraft.value.trim();
+  if (!pattern || stylePatternError.value) return;
+  styleRules.value.push({ pattern, className: styleClassDraft.value.trim() || 'st-custom' });
+  stylePatternDraft.value = '';
+  styleClassDraft.value = '';
+}
+function removeStyleRule(i: number): void {
+  styleRules.value.splice(i, 1);
+}
+
 const CHAPTER_RULE_OPTIONS: { value: ChapterRuleKind; label: string; hint: string }[] = [
   { value: 'per-assistant', label: '每条 AI 回复一章', hint: '每遇到一条 AI 回复就开新的一章；中间的用户楼层会并入上一章的正文。' },
   { value: 'per-message', label: '每条消息各自一章', hint: '每条消息单独成一章，用户与 AI 楼层各占一章。' },
@@ -344,7 +374,7 @@ function exportTxt(): void {
 }
 
 function exportEpub(): void {
-  download(`${bookMeta.value.title}.epub`, buildEpub(chapters.value, bookMeta.value), 'application/epub+zip');
+  download(`${bookMeta.value.title}.epub`, buildEpub(chapters.value, bookMeta.value, styleConfig.value), 'application/epub+zip');
 }
 
 function revokeCoverPreview(): void {
@@ -441,6 +471,9 @@ function saveRules(): void {
         rangeEnd: rangeEnd.value,
         chapterRuleKind: chapterRuleKind.value,
         everyN: everyN.value,
+        stylePresets: stylePresets.value,
+        styleRules: styleRules.value,
+        styleCss: styleCss.value,
       }),
     );
   } catch {
@@ -463,15 +496,23 @@ function loadRules(): void {
     if (Number.isFinite(d.rangeEnd)) rangeEnd.value = d.rangeEnd;
     if (['per-assistant', 'per-message', 'title', 'every'].includes(d.chapterRuleKind)) chapterRuleKind.value = d.chapterRuleKind;
     if (Number.isFinite(d.everyN)) everyN.value = d.everyN;
+    if (Array.isArray(d.stylePresets)) stylePresets.value = d.stylePresets.filter((x: unknown) => typeof x === 'string');
+    if (Array.isArray(d.styleRules))
+      styleRules.value = d.styleRules
+        .filter((x: unknown): x is StyleRule => !!x && typeof (x as StyleRule).pattern === 'string' && typeof (x as StyleRule).className === 'string')
+        .map((x: StyleRule) => ({ pattern: x.pattern, className: x.className }));
+    if (typeof d.styleCss === 'string') styleCss.value = d.styleCss;
   } catch {
     /* ignore malformed */
   }
 }
 onMounted(loadRules);
 onUnmounted(revokeCoverPreview);
-watch([stripReasoning, stripOOC, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN], saveRules, {
-  deep: true,
-});
+watch(
+  [stripReasoning, stripOOC, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss],
+  saveRules,
+  { deep: true },
+);
 watch([limitRange, rangeStart, rangeEnd], () => {
   if (rawMessages.value.length) applyFilters();
 });
@@ -857,6 +898,38 @@ async function onDrop(event: DragEvent): Promise<void> {
           </div>
           <div class="cex__panebody cex__chappreview-body">{{ selectedChapter.body }}</div>
         </div>
+      </Section>
+
+      <Section title="排版样式" :collapsible="false" size="sm">
+        <p class="cex__hint">为 EPUB 正文添加排版样式（TXT 导出不受影响）。</p>
+        <ul class="cex__styles">
+          <li v-for="p in STYLE_PRESETS" :key="p.id" class="cex__style">
+            <label class="cex__opt">
+              <input type="checkbox" :checked="stylePresets.includes(p.id)" @change="togglePreset(p.id)" /> {{ p.label }}
+            </label>
+            <p class="cex__stylehint">{{ p.hint }}</p>
+          </li>
+        </ul>
+
+        <Section title="高级：自定义规则与 CSS" size="sm" :default-open="false">
+          <p class="cex__hint">「匹配」填标签名或 <code>/正则/修饰符</code>；命中文本会套上你填的类名，再由下方 CSS 控制外观。</p>
+          <div class="cex-rule">
+            <div class="cex-rule__row cex__stylerule">
+              <TextField v-model="stylePatternDraft" mono :invalid="!!stylePatternError" spellcheck="false" placeholder="匹配，如 /「.*?」/ 或 voice" @keyup.enter="addStyleRule" />
+              <TextField v-model="styleClassDraft" mono spellcheck="false" placeholder="类名，如 st-voice" class="cex__styleclass" @keyup.enter="addStyleRule" />
+              <Button variant="secondary" size="sm" :disabled="!stylePatternDraft.trim() || !!stylePatternError" @click="addStyleRule">添加</Button>
+            </div>
+            <p v-if="stylePatternError" class="cex-rule__error">正则错误：{{ stylePatternError }}</p>
+            <div v-if="styleRules.length" class="cex-rule__chips">
+              <span v-for="(r, i) in styleRules" :key="i" class="cex-rule__chip">
+                {{ r.pattern }} → .{{ r.className }}<IconButton name="close" title="移除" danger class="cex-rule__chip-x" @click="removeStyleRule(i)" />
+              </span>
+            </div>
+          </div>
+          <label class="cex__csslabel">自定义 CSS
+            <textarea v-model="styleCss" class="cex__css" spellcheck="false" rows="4" placeholder=".st-voice { color: #2c3e50; }"></textarea>
+          </label>
+        </Section>
       </Section>
     </section>
     </div>
@@ -1562,5 +1635,93 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .cex__chappreview-body {
   max-height: 140px;
+}
+
+/* 排版样式 — preset toggle list. */
+.cex__styles {
+  list-style: none;
+  margin: var(--pet-space-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pet-space-sm);
+}
+.cex__stylehint {
+  margin: 2px 0 0 calc(var(--pet-space-sm) + 14px);
+  font-size: var(--pet-font-size-xs);
+  line-height: var(--pet-font-leading-normal);
+  color: var(--pet-color-text-faint);
+}
+/* Advanced: two-field custom rule row (匹配 + 类名). Pattern grows, class is fixed-ish. */
+.cex__stylerule :deep(.pet-field) {
+  flex: 1;
+  min-width: 0;
+}
+.cex__styleclass {
+  flex: 0 1 8em;
+}
+.cex__csslabel {
+  display: block;
+  margin-top: var(--pet-space-md);
+  font-size: var(--pet-font-size-xs);
+  color: var(--pet-color-text-muted);
+}
+.cex__css {
+  display: block;
+  width: 100%;
+  margin-top: var(--pet-space-xs);
+  padding: var(--pet-space-sm);
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: var(--pet-font-mono);
+  font-size: var(--pet-font-size-xs);
+  color: var(--pet-color-text);
+  background: var(--pet-color-surface);
+  border: 1px solid var(--pet-color-border);
+  border-radius: var(--pet-radius-sm);
+}
+.cex__css:focus {
+  outline: none;
+  border-color: var(--pet-color-accent);
+}
+
+/* Mirror of RuleField's row/error/chip styles (scoped styles can't be shared). */
+.cex-rule {
+  margin-top: var(--pet-space-sm);
+}
+.cex-rule__row {
+  display: flex;
+  align-items: center;
+  gap: var(--pet-space-sm);
+}
+.cex-rule__error {
+  margin: var(--pet-space-sm) 0 0;
+  font-size: var(--pet-font-size-sm);
+  color: var(--pet-color-accent-text);
+  background: var(--pet-color-danger);
+  padding: var(--pet-space-sm) var(--pet-space-md);
+  border-radius: var(--pet-radius-sm);
+}
+.cex-rule__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pet-space-sm);
+  margin-top: var(--pet-space-sm);
+}
+.cex-rule__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pet-space-xs);
+  padding: 2px 2px 2px var(--pet-space-sm);
+  font-family: var(--pet-font-mono);
+  font-size: var(--pet-font-size-xs);
+  color: var(--pet-color-text);
+  background: var(--pet-color-surface-raised);
+  border: 1px solid var(--pet-color-border);
+  border-radius: var(--pet-radius-pill);
+}
+.cex-rule__chip .cex-rule__chip-x {
+  width: 18px;
+  height: 18px;
 }
 </style>
