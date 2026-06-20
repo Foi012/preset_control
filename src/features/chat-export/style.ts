@@ -74,7 +74,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     id: 'dropcap',
     label: '段首下沉首字',
     hint: '每章第一段的首字放大下沉。',
-    css: '.chapter > p:first-of-type::first-letter { font-size: 2.4em; line-height: 1; float: left; margin: 0 0.06em 0 0; }',
+    css: '.chapter p.cex-lead { text-indent: 0; }\n.chapter p.cex-lead::first-letter { float: left; font-size: 3em; line-height: 0.8; margin: 0.02em 0.12em 0 0; font-weight: 600; }',
   },
 ];
 
