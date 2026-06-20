@@ -848,6 +848,7 @@ async function onDrop(event: DragEvent): Promise<void> {
           <span>{{ previewFlags.unmatched }} 条 AI 消息未匹配正文 / 标题规则，已回退为整段原文。</span>
           <button type="button" class="cex__flaglink" @click="jumpToFlag(previewFlags.firstUnmatched)">查看</button>
         </p>
+        <button type="button" class="cex__flaglink cex__flags-fix" @click="goStep('rules')">← 返回「规则」调整</button>
       </div>
 
       <!-- Phase 3: after / before preview -->
@@ -1527,6 +1528,11 @@ async function onDrop(event: DragEvent): Promise<void> {
   color: var(--pet-color-accent);
   cursor: pointer;
   text-decoration: underline;
+}
+/* Banner footer: one shared route back to the rules step, where these are actually fixed. */
+.cex__flags-fix {
+  align-self: flex-start;
+  font-size: var(--pet-font-size-xs);
 }
 /* No extra top margin — the step lead's bottom margin already sets the gap, matching
    the other steps (was double-spaced). */
