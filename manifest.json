@@ -1,12 +1,12 @@
 {
-  "display_name": "预设控制台",
+  "display_name": "生鱼片工具箱",
   "loading_order": 100,
   "requires": [],
   "optional": [],
   "js": "index.js",
   "css": "",
-  "author": "",
+  "author": "sashiMi",
   "version": "0.1.0",
-  "description": "Native SillyTavern UI extension for toggling and arranging preset prompt entries.",
+  "description": "SillyTavern 工具箱：预设控制台（开关、分组、编排预设条目）与聊天导出（聊天记录导出为 TXT / EPUB）。",
   "minimum_client_version": "1.12.13"
 }

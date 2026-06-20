@@ -10,7 +10,7 @@ import Trigger from './components/Trigger.vue';
 const ui = useUiStore();
 
 const TOOL_TITLE: Record<string, string> = {
-  home: '工具箱',
+  home: '生鱼片工具箱',
   preset: '预设控制台',
   export: '聊天导出',
 };

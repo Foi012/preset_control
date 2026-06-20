@@ -1,94 +1,50 @@
-# 预设控制台 · Preset Control
+# 生鱼片工具箱 · Sashimi Toolbox
 
-Native SillyTavern extension for two workflows:
+A draggable floating toolbox for SillyTavern. One install, one trigger — pick a tool:
 
-- **Preset console**: turn a flat chat-completion preset into a compact floating console for toggling, grouping, editing, importing, and exporting entries without changing prompt order.
-- **Chat export**: turn an active chat or `.jsonl` chat log into cleaned TXT / EPUB output.
+| 工具 | 做什么 |
+| --- | --- |
+| **预设控制台** | 把扁平的对话补全预设变成紧凑的开关面板：切换、分组、编辑、导入导出条目，且**不改动 prompt 顺序**。 |
+| **聊天导出** | 把当前聊天或 `.jsonl` 聊天记录清洗后导出为 **TXT / EPUB** 电子书。 |
 
-## 功能
+两个工具相互独立，共用同一个浮动入口。
 
-- 可拖拽的浮动工具箱：打开预设控制台或聊天导出工具。
-- 规则感知的预设开关：单选、多选、始终开启、文本输入会自动使用合适控件。
-- 虚拟分组：`[NN-NAME]` 空提示词会作为自动分组建议，`NN` 控制建议顺序；编辑模式中的移动不会重排真实 prompt list。
-- 模式与快照：保存一组开关状态并一键应用。
-- 随预设携带：配置保存在 `preset.extensions.presetEasyToggle`，应跟随同一个 ST account / preset data，而不是只存在浏览器本地。
-- 聊天导出：扫描标签、包含 / 排除内容、限制楼层范围、角色分隔线、封面压缩、章节切分、TXT / EPUB 导出。
+---
 
-## Install
+## 预设控制台
 
-1. In SillyTavern, open **Extensions** and click **Install Extension**.
-2. Paste the repository URL:
+SillyTavern 的预设是一个扁平的 prompt 列表，靠形如 `[NN-NAME]` 的空提示词来「假装」分区。预设控制台把这套约定解码成一个可操作的控制台。
 
-```text
-https://github.com/Foi012/preset_control
-```
+- **规则感知的开关。** 单选（radio）、多选（checkbox）、始终开启（📍）、文本输入（✍️）会自动套用合适的控件——直接从条目名读出，无需逐条配置。
+- **虚拟分组。** `[NN-NAME]` 空提示词作为自动分组建议，`NN` 决定建议顺序。你可以在编辑模式里自定义分组、重命名、移动条目、两级嵌套——**真实的 prompt 顺序永远不被重排**（顺序会影响生成）。
+- **模式与快照。** 「模式」是一组分组的作用域 / 布局；「快照」保存一组开关状态，可一键应用。
+- **随预设携带。** 配置随预设一起保存，跟随预设走（导出 / 切号 / 换设备都在），而不是只存在浏览器本地；并带有备份与损坏保护。
+- **使用 / 编辑两种模式。** 使用模式只读地呈现当前状态、便于一眼扫读并快速切换；编辑模式负责配置分组与规则。
 
-3. Click **Install**, then refresh SillyTavern.
+## 聊天导出
 
-SillyTavern clones this repo into:
+把一段聊天变成干净的电子书，是一个四步向导：
 
-```text
-data/<user-handle>/extensions/preset_control/
-```
+1. **来源** — 读取当前聊天，或拖入 / 导入 `.jsonl`；读取成功自动进入下一步。
+2. **规则** — 扫描成对标签，设定**包含内容**（用户楼层 / 隐藏楼层、楼层范围、角色分隔线、正文与标题规则）与**排除内容**（think / OOC 等预设 + 自定义规则）。每个标签只能落在一个去向：不处理 / 排除 / 包含。
+3. **预览** — 逐条对照原文与清理后的结果；正则有问题会**阻止导出**，不会生成空章节的坏文件。
+4. **导出** — 设置书籍信息（标题 / 作者 / 语言、可选封面）、章节切分方式，导出 **TXT** 或 **EPUB**。
 
-The root `manifest.json` loads the built root bundle:
+导出的 EPUB 已在 Apple Books 与 Calibre 中验证可正常打开。
 
-```text
-index.js
-```
+---
 
-## Build
+## 安装
 
-```sh
-pnpm install
-pnpm build
-```
+1. 在 SillyTavern 中打开 **Extensions**，点击 **Install Extension**。
+2. 粘贴仓库地址：
 
-## Preset Console Notes
+   ```text
+   https://github.com/Foi012/preset_control
+   ```
 
-- Empty prompt headers named `[NN-NAME]` are parsed as automatic group suggestions.
-- Grouping is a virtual overlay. The preset prompt order is not rewritten, because prompt order can affect generation.
-- Header export downloads the console config JSON: groups, modes, snapshots, entry metadata, and UI config.
-- Header import accepts either that raw config JSON or a full SillyTavern preset export containing `[⚙️CONSOLE-CONFIG]`.
-- Use config export/import when moving between accounts, devices, or old Tavern Helper-managed presets.
+3. 点击 **Install**，然后刷新 SillyTavern。
 
-## Chat Export Notes
+---
 
-1. **来源**: read the active chat or import `.jsonl`; successful reads advance to rules automatically.
-2. **规则**: scan paired tags, include / exclude content, include user or hidden floors, limit floor range, and optionally insert role dividers.
-3. **预览**: compare original messages with cleaned output.
-4. **导出**: set book metadata, optional compressed cover image, chapter splitting, and export TXT / EPUB.
-
-Export details:
-
-- The tag scanner routes each discovered tag to one destination: 不处理, 排除, or 包含.
-- Title and body rules can use a tag name or regex.
-- Floor range is applied after the include-user / include-hidden filters.
-- Consecutive messages from the same role are kept together; the optional role divider is inserted only when the role changes.
-- Cover uploads are compressed in-browser before being embedded into EPUB.
-
-## Checks
-
-```sh
-pnpm check:parser
-pnpm check:config
-pnpm check:preset-io
-pnpm check:preset-io-native
-pnpm check:store
-pnpm check:chat-normalize
-pnpm check:chat-extract
-pnpm check:chat-scan
-pnpm check:chat-chapters
-pnpm check:chat-render
-pnpm check:chat-epub
-pnpm build
-```
-
-## Source Layout
-
-- `src/extension/preset-control/` is the shipped native SillyTavern extension entry.
-- `src/features/preset-console/` contains the preset console feature: parser, config, store, native ST adapter, and console UI.
-- `src/features/chat-export/` contains the chat export workflow and parser/render/export checks.
-- `src/shared/ui/` is the shared design system used by both tools. Imports use the short `@/ui/*` alias.
-- `src/legacy/tavern-helper/` preserves the older Tavern Helper iframe/script runtime. It is excluded from the native TS project and is not the webpack entry.
-- `src/env.d.ts` holds app-wide SillyTavern globals.
+> 开发与构建说明见 [`DEVELOPMENT.md`](DEVELOPMENT.md)。
