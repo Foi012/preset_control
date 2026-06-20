@@ -30,6 +30,7 @@ check('default keeps user + assistant + hidden turn', msgs.length, 3);
 check('roles: hidden turn is still assistant', msgs.map(m => m.role), ['user', 'assistant', 'assistant']);
 check('hidden flags', msgs.map(m => m.hidden), [false, false, true]);
 check('indices dense 0-based', msgs.map(m => m.index), [0, 1, 2]);
+check('srcIndex tracks source position (header at 0 skipped)', msgs.map(m => m.srcIndex), [1, 2, 3]);
 
 // active swipe = the message's `mes` (== swipes[swipe_id]), never a merge.
 check('assistant content is the active swipe', msgs[1].content, '月光落在黄石公园的松林上。');

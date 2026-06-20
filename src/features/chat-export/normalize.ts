@@ -35,6 +35,12 @@ export type Role = 'user' | 'assistant' | 'system';
 export interface NormMessage {
   /** 0-based, dense over the *surviving* messages (post-filter). */
   index: number;
+  /**
+   * Position in the *source* array (before filtering). For the active-chat source this
+   * equals ST's `mesid`, so the UI can locate the message in ST's chat; for a `.jsonl`
+   * import it's just the line position (no live message to jump to).
+   */
+  srcIndex: number;
   role: Role;
   name: string;
   /** Active-swipe text. */
@@ -120,21 +126,22 @@ export function normalizeMessages(raw: RawMessage[], opts: NormalizeOptions = {}
   const includeHidden = opts.includeHidden ?? true;
   const includeSystem = opts.includeSystem ?? false;
   const out: NormMessage[] = [];
-  for (const m of raw) {
-    if (typeof m.mes !== 'string') continue; // header / non-message line
+  raw.forEach((m, srcIndex) => {
+    if (typeof m.mes !== 'string') return; // header / non-message line
     const role = roleOf(m);
     const hidden = m.is_system === true && role !== 'system';
-    if (role === 'user' && !includeUser) continue;
-    if (role === 'system' && !includeSystem) continue;
-    if (hidden && !includeHidden) continue;
+    if (role === 'user' && !includeUser) return;
+    if (role === 'system' && !includeSystem) return;
+    if (hidden && !includeHidden) return;
     out.push({
       index: out.length,
+      srcIndex,
       role,
       name: typeof m.name === 'string' ? m.name : '',
       content: activeSwipeText(m),
       reasoning: typeof m.extra?.reasoning === 'string' ? m.extra.reasoning : '',
       hidden,
     });
-  }
+  });
   return out;
 }

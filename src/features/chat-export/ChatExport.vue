@@ -228,6 +228,7 @@ function clearAllRules(): void {
 
 // Keep the raw read so toggles can re-filter without re-reading the source.
 const rawMessages = ref<RawMessage[]>([]);
+const sourceKind = ref<'active' | 'jsonl' | null>(null);
 
 // Phase 3 — before/after preview navigator. Step through messages and compare the
 // raw content against the cleaned/extracted body. `navScope` narrows the walk to AI
@@ -303,6 +304,45 @@ function resetNav(): void {
 function setNavScope(scope: string): void {
   navScope.value = scope as NavScope;
   resetNav();
+}
+
+// Jump-to-ST: locate the focused message in SillyTavern's own chat so the user can edit
+// the source (only meaningful for the active-chat source). ST lazy-renders recent
+// messages; older ones sit behind a #show_more_messages button, so we click it (with a
+// tick between each) until the target mesid renders, then scroll + flash it.
+const jumpError = ref('');
+function stDocument(): Document | null {
+  const w = window as unknown as { SillyTavern?: unknown; parent?: { SillyTavern?: unknown; document?: Document } };
+  if (w.SillyTavern) return document; // native mount — we're in ST's page
+  if (w.parent?.SillyTavern) return w.parent.document ?? null; // iframe mount — ST is the parent
+  return null;
+}
+async function jumpToStMessage(srcIndex: number): Promise<void> {
+  jumpError.value = '';
+  const doc = stDocument();
+  if (!doc) {
+    jumpError.value = '未能连接到 SillyTavern。';
+    return;
+  }
+  const selector = `#chat .mes[mesid="${srcIndex}"]`;
+  for (let i = 0; i < 120; i++) {
+    const el = doc.querySelector(selector) as HTMLElement | null;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const prev = el.style.backgroundColor;
+      el.style.transition = 'background-color 0.4s';
+      el.style.backgroundColor = 'rgba(255, 196, 0, 0.28)';
+      setTimeout(() => {
+        el.style.backgroundColor = prev;
+      }, 1400);
+      return;
+    }
+    const more = doc.querySelector('#show_more_messages') as HTMLElement | null;
+    if (!more) break; // nothing older left to reveal
+    more.click();
+    await new Promise(resolve => setTimeout(resolve, 120));
+  }
+  jumpError.value = '未能在 ST 中定位该消息（可能为导入的聊天）。';
 }
 // If rule edits make the current scope vanish (e.g. all empties fixed), fall back to 全部.
 watch(navScopeOptions, opts => {
@@ -623,6 +663,7 @@ async function readActiveChat(): Promise<void> {
   loading.value = true;
   try {
     rawMessages.value = await loadRawMessages({ kind: 'active' });
+    sourceKind.value = 'active';
     applyFilters();
     sourceLabel.value = '当前聊天';
     if (messages.value.length === 0) error.value = '未读取到聊天消息（确认 SillyTavern 已打开一段对话）。';
@@ -639,6 +680,7 @@ async function readJsonlText(text: string, label: string): Promise<void> {
   loading.value = true;
   try {
     rawMessages.value = await loadRawMessages({ kind: 'jsonl', text });
+    sourceKind.value = 'jsonl';
     applyFilters();
     sourceLabel.value = label;
     if (messages.value.length === 0) error.value = '该文件未解析出任何消息。';
@@ -886,6 +928,7 @@ async function onDrop(event: DragEvent): Promise<void> {
           <IconButton name="chevron-right" title="下一条" :disabled="focusIndex >= navMessages.length - 1" @click="focusNext" />
           <Dropdown class="cex__pvscope" variant="inline" align="right" :model-value="navScope" :options="navScopeOptions" @update:model-value="setNavScope" />
         </div>
+        <p v-if="jumpError" class="cex__warn cex__jumperror">{{ jumpError }}</p>
         <div class="cex__diff">
           <!-- After first — the result the user is verifying. -->
           <div class="cex__pane">
@@ -910,6 +953,12 @@ async function onDrop(event: DragEvent): Promise<void> {
                 <span class="cex__name">{{ focused.name }}</span>
                 <span v-if="focused.hidden" class="cex__hidden" title="被 /hide 隐藏的楼层">隐藏</span>
               </span>
+              <IconButton
+                v-if="sourceKind === 'active'"
+                name="edit"
+                title="在 SillyTavern 中定位并编辑这条消息"
+                @click="jumpToStMessage(focused.srcIndex)"
+              />
               <span
                 class="cex__role"
                 :class="`cex__role--${focused.role}`"
@@ -1562,6 +1611,10 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .cex__pvscope {
   margin-left: auto;
+}
+.cex__jumperror {
+  margin-bottom: var(--pet-space-sm);
+  color: var(--pet-color-danger);
 }
 /* Pane header — label on the left, badges/role on the right. */
 .cex__pvhead {
