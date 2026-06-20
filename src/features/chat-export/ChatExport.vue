@@ -262,6 +262,36 @@ function resetNav(): void {
   focusIndex.value = 0;
 }
 
+// Step ③ health flags — one scan over the export set: messages that go empty after the
+// rules (silently dropped from the book) and assistant turns that didn't match the
+// 正文/标题 rules (fell back to whole text). Indices are into `messages` for jump-to.
+const previewFlags = computed(() => {
+  const hasRules = includeRules.value.length > 0 || titleRules.value.length > 0;
+  let empty = 0;
+  let unmatched = 0;
+  let firstEmpty = -1;
+  let firstUnmatched = -1;
+  messages.value.forEach((m, i) => {
+    const ex = extractMessage(m.content, m.role, config.value);
+    if (!ex.body.trim()) {
+      empty++;
+      if (firstEmpty < 0) firstEmpty = i;
+    }
+    if (hasRules && m.role === 'assistant' && !ex.matched) {
+      unmatched++;
+      if (firstUnmatched < 0) firstUnmatched = i;
+    }
+  });
+  return { empty, unmatched, firstEmpty, firstUnmatched };
+});
+
+/** Jump the preview to a flagged message (index into `messages`); show all roles so it's reachable. */
+function jumpToFlag(idx: number): void {
+  if (idx < 0) return;
+  assistantOnlyNav.value = false;
+  focusIndex.value = idx;
+}
+
 // Phase 4 — book metadata, chapter splitting, export.
 const bookTitle = ref('');
 const bookAuthor = ref('');
@@ -806,6 +836,20 @@ async function onDrop(event: DragEvent): Promise<void> {
       <h2 class="cex__title">预览效果</h2>
       <p class="cex__lead">逐条对比原文与整理后的正文，确认规则符合预期。</p>
 
+      <!-- Health flags: silent drops / unmatched rules, each jumps to the first case. -->
+      <div v-if="previewFlags.empty || previewFlags.unmatched" class="cex__flags">
+        <p v-if="previewFlags.empty" class="cex__flag">
+          <PetIcon name="alert" />
+          <span>{{ previewFlags.empty }} 条消息清理后为空，不会写入电子书。</span>
+          <button type="button" class="cex__flaglink" @click="jumpToFlag(previewFlags.firstEmpty)">查看</button>
+        </p>
+        <p v-if="previewFlags.unmatched" class="cex__flag">
+          <PetIcon name="alert" />
+          <span>{{ previewFlags.unmatched }} 条 AI 消息未匹配正文 / 标题规则，已回退为整段原文。</span>
+          <button type="button" class="cex__flaglink" @click="jumpToFlag(previewFlags.firstUnmatched)">查看</button>
+        </p>
+      </div>
+
       <!-- Phase 3: after / before preview -->
       <div v-if="focused && focusedExtract" class="cex__preview">
         <div class="cex__pvnav">
@@ -834,8 +878,9 @@ async function onDrop(event: DragEvent): Promise<void> {
               <span class="cex__panelabel">清理后</span>
               <span class="cex__pvhead-tags">
                 <span v-for="(val, key) in focusedExtract.fields" :key="key" class="cex__field">{{ key }}: {{ val }}</span>
+                <span v-if="!focusedExtract.body.trim()" class="cex__nomatch" title="清理后为空，不会写入电子书">空</span>
                 <span
-                  v-if="(includeRules.length || titleRules.length) && focused.role === 'assistant' && !focusedExtract.matched"
+                  v-else-if="(includeRules.length || titleRules.length) && focused.role === 'assistant' && !focusedExtract.matched"
                   class="cex__nomatch"
                   title="未匹配正文 / 标题规则，已回退为整段"
                 >未匹配</span>
@@ -1442,6 +1487,46 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-size: var(--pet-font-size-xxs);
   color: var(--pet-color-accent-text);
   background: var(--pet-color-danger);
+}
+/* Health-flag banner — neutral attention (not an error): empties / unmatched counts. */
+.cex__flags {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pet-space-xs);
+  margin-bottom: var(--pet-space-md);
+}
+.cex__flag {
+  display: flex;
+  align-items: center;
+  gap: var(--pet-space-xs);
+  margin: 0;
+  padding: var(--pet-space-sm) var(--pet-space-md);
+  font-size: var(--pet-font-size-xs);
+  line-height: var(--pet-font-leading-normal);
+  color: var(--pet-color-text);
+  background: var(--pet-color-surface-raised);
+  border: 1px solid var(--pet-color-border);
+  border-radius: var(--pet-radius-sm);
+}
+.cex__flag :deep(.pet-icon) {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--pet-color-danger);
+}
+.cex__flag span {
+  flex: 1;
+  min-width: 0;
+}
+.cex__flaglink {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--pet-color-accent);
+  cursor: pointer;
+  text-decoration: underline;
 }
 /* No extra top margin — the step lead's bottom margin already sets the gap, matching
    the other steps (was double-spaced). */
