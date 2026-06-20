@@ -324,9 +324,10 @@ async function jumpToStMessage(srcIndex: number): Promise<void> {
     jumpError.value = '未能连接到 SillyTavern。';
     return;
   }
-  const selector = `#chat .mes[mesid="${srcIndex}"]`;
+  // Not scoped to #chat in case the container id differs across ST versions.
+  const find = (): HTMLElement | null => doc.querySelector(`.mes[mesid="${srcIndex}"]`);
   for (let i = 0; i < 120; i++) {
-    const el = doc.querySelector(selector) as HTMLElement | null;
+    const el = find();
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       const prev = el.style.backgroundColor;
@@ -340,9 +341,18 @@ async function jumpToStMessage(srcIndex: number): Promise<void> {
     const more = doc.querySelector('#show_more_messages') as HTMLElement | null;
     if (!more) break; // nothing older left to reveal
     more.click();
-    await new Promise(resolve => setTimeout(resolve, 120));
+    await new Promise(resolve => setTimeout(resolve, 150));
   }
-  jumpError.value = '未能在 ST 中定位该消息（可能为导入的聊天）。';
+  // Couldn't find it — log what the DOM actually looks like so the cause is diagnosable.
+  const sample = doc.querySelector('.mes') as HTMLElement | null;
+  console.warn('[chat-export] jump-to-ST failed', {
+    targetMesid: srcIndex,
+    hasChatContainer: !!doc.querySelector('#chat'),
+    mesCount: doc.querySelectorAll('.mes').length,
+    sampleMesAttrs: sample ? sample.getAttributeNames() : null,
+    hasShowMore: !!doc.querySelector('#show_more_messages'),
+  });
+  jumpError.value = '未能在 ST 中定位该消息。请打开浏览器控制台（F12）把 [chat-export] 的诊断信息发我。';
 }
 // If rule edits make the current scope vanish (e.g. all empties fixed), fall back to 全部.
 watch(navScopeOptions, opts => {
@@ -895,18 +905,18 @@ async function onDrop(event: DragEvent): Promise<void> {
       <h2 class="cex__title">预览效果</h2>
       <p class="cex__lead">逐条对比原文与整理后的正文，确认规则符合预期。</p>
 
-      <!-- Health flags: each kind is its own row + arrow that scopes the nav to just those messages. -->
+      <!-- Health flags: each whole row is a button that scopes the nav to just those messages. -->
       <div v-if="previewFlags.empty || previewFlags.unmatched" class="cex__flags">
-        <div v-if="previewFlags.empty" class="cex__flag cex__flag--high">
+        <button v-if="previewFlags.empty" type="button" class="cex__flag cex__flag--high" title="筛选查看这些消息" @click="setNavScope('empty')">
           <PetIcon name="alert" />
           <span>{{ previewFlags.empty }} 条消息清理后为空，不会写入电子书。</span>
-          <IconButton name="chevron-right" title="筛选查看这些消息" @click="setNavScope('empty')" />
-        </div>
-        <div v-if="previewFlags.unmatched" class="cex__flag">
+          <PetIcon name="chevron-right" class="cex__flag-go" />
+        </button>
+        <button v-if="previewFlags.unmatched" type="button" class="cex__flag" title="筛选查看这些消息" @click="setNavScope('unmatched')">
           <PetIcon name="alert" />
           <span>{{ previewFlags.unmatched }} 条 AI 消息未匹配正文 / 标题规则，已回退为整段原文。</span>
-          <IconButton name="chevron-right" title="筛选查看这些消息" @click="setNavScope('unmatched')" />
-        </div>
+          <PetIcon name="chevron-right" class="cex__flag-go" />
+        </button>
       </div>
 
       <!-- Phase 3: after / before preview -->
@@ -953,12 +963,6 @@ async function onDrop(event: DragEvent): Promise<void> {
                 <span class="cex__name">{{ focused.name }}</span>
                 <span v-if="focused.hidden" class="cex__hidden" title="被 /hide 隐藏的楼层">隐藏</span>
               </span>
-              <IconButton
-                v-if="sourceKind === 'active'"
-                name="edit"
-                title="在 SillyTavern 中定位并编辑这条消息"
-                @click="jumpToStMessage(focused.srcIndex)"
-              />
               <span
                 class="cex__role"
                 :class="`cex__role--${focused.role}`"
@@ -1093,6 +1097,13 @@ async function onDrop(event: DragEvent): Promise<void> {
         <Button icon="download" :disabled="!chapters.length" @click="exportEpub">导出 EPUB</Button>
       </template>
       <Button v-if="step === 'rules'" variant="ghost" :disabled="!hasAnyRule" @click="clearAllRules">清除规则</Button>
+      <Button
+        v-if="step === 'preview' && sourceKind === 'active'"
+        variant="ghost"
+        icon="edit"
+        :disabled="!focused"
+        @click="focused && jumpToStMessage(focused.srcIndex)"
+      >在 ST 中定位</Button>
       <Button
         v-if="nextStep"
         icon-right="chevron-right"
@@ -1559,36 +1570,51 @@ async function onDrop(event: DragEvent): Promise<void> {
   gap: var(--pet-space-xs);
   margin-bottom: var(--pet-space-md);
 }
+/* Whole row is the button that scopes the nav to this flag's messages. */
 .cex__flag {
   display: flex;
   align-items: center;
   gap: var(--pet-space-xs);
+  width: 100%;
   margin: 0;
   padding: var(--pet-space-xs) var(--pet-space-sm) var(--pet-space-xs) var(--pet-space-md);
+  text-align: left;
+  font: inherit;
   font-size: var(--pet-font-size-xs);
   line-height: var(--pet-font-leading-normal);
   color: var(--pet-color-text);
   background: var(--pet-color-surface-raised);
   border: 1px solid var(--pet-color-border);
   border-radius: var(--pet-radius-sm);
+  cursor: pointer;
+  transition: border-color var(--pet-motion-fast) var(--pet-motion-ease);
+}
+.cex__flag:hover {
+  border-color: var(--pet-color-accent);
 }
 .cex__flag span {
   flex: 1;
   min-width: 0;
 }
-/* The leading status glyph (direct child) — not the chevron IconButton. */
 .cex__flag > :deep(.pet-icon) {
   flex: none;
   width: 14px;
   height: 14px;
-  color: var(--pet-color-text-muted); /* unmatched = informational */
+}
+/* Leading status glyph: unmatched = informational (muted). */
+.cex__flag > :deep(.pet-icon):first-child {
+  color: var(--pet-color-text-muted);
 }
 /* Empty = serious (silent data loss): danger glyph + danger left rule. */
 .cex__flag--high {
   border-left: 3px solid var(--pet-color-danger);
 }
-.cex__flag--high > :deep(.pet-icon) {
+.cex__flag--high > :deep(.pet-icon):first-child {
   color: var(--pet-color-danger);
+}
+/* Trailing chevron — affordance only, always muted. */
+.cex__flag :deep(.cex__flag-go) {
+  color: var(--pet-color-text-faint);
 }
 /* No extra top margin — the step lead's bottom margin already sets the gap, matching
    the other steps (was double-spaced). */
