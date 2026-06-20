@@ -233,7 +233,8 @@ const rawMessages = ref<RawMessage[]>([]);
 // raw content against the cleaned/extracted body. `navScope` narrows the walk to AI
 // turns or to just the flagged messages (empty / unmatched) for focused review.
 const focusIndex = ref(0);
-type NavScope = 'all' | 'assistant' | 'flagged';
+// The two flag kinds are separate scopes (different severity), not lumped into one.
+type NavScope = 'all' | 'assistant' | 'empty' | 'unmatched';
 const navScope = ref<NavScope>('all');
 
 // Per-message diagnostics over the export set (parallel to `messages`): empty after the
@@ -262,16 +263,18 @@ const previewFlags = computed(() => {
 
 const navMessages = computed(() => {
   if (navScope.value === 'assistant') return messages.value.filter(m => m.role === 'assistant');
-  if (navScope.value === 'flagged') return messages.value.filter((_, i) => messageDiags.value[i]?.flagged);
+  if (navScope.value === 'empty') return messages.value.filter((_, i) => messageDiags.value[i]?.empty);
+  if (navScope.value === 'unmatched') return messages.value.filter((_, i) => messageDiags.value[i]?.unmatched);
   return messages.value;
 });
-// The 仅标记 segment only appears when there's something flagged to review.
+// Each flag kind is its own scope option, shown only when it has instances.
 const navScopeOptions = computed(() => {
   const opts = [
     { value: 'all', label: '全部' },
     { value: 'assistant', label: '仅 AI' },
   ];
-  if (previewFlags.value.flaggedTotal > 0) opts.push({ value: 'flagged', label: `仅标记 (${previewFlags.value.flaggedTotal})` });
+  if (previewFlags.value.empty > 0) opts.push({ value: 'empty', label: `清理后为空 (${previewFlags.value.empty})` });
+  if (previewFlags.value.unmatched > 0) opts.push({ value: 'unmatched', label: `未匹配 (${previewFlags.value.unmatched})` });
   return opts;
 });
 const focused = computed<NormMessage | null>(() => navMessages.value[Math.min(focusIndex.value, navMessages.value.length - 1)] ?? null);
@@ -301,17 +304,10 @@ function setNavScope(scope: string): void {
   navScope.value = scope as NavScope;
   resetNav();
 }
-/** Banner action: review every flagged message one-by-one via the existing prev/next nav. */
-function reviewFlagged(): void {
-  setNavScope('flagged');
-}
-// If rule edits clear all flags while in 仅标记, fall back to 全部 so the preview isn't empty.
-watch(
-  () => previewFlags.value.flaggedTotal,
-  total => {
-    if (total === 0 && navScope.value === 'flagged') setNavScope('all');
-  },
-);
+// If rule edits make the current scope vanish (e.g. all empties fixed), fall back to 全部.
+watch(navScopeOptions, opts => {
+  if (!opts.some(o => o.value === navScope.value)) setNavScope('all');
+});
 
 // Phase 4 — book metadata, chapter splitting, export.
 const bookTitle = ref('');
@@ -857,19 +853,18 @@ async function onDrop(event: DragEvent): Promise<void> {
       <h2 class="cex__title">预览效果</h2>
       <p class="cex__lead">逐条对比原文与整理后的正文，确认规则符合预期。</p>
 
-      <!-- Health flags: silent drops / unmatched rules; review them all via the 仅标记 nav filter. -->
+      <!-- Health flags: each kind is its own row + arrow that scopes the nav to just those messages. -->
       <div v-if="previewFlags.empty || previewFlags.unmatched" class="cex__flags">
-        <p v-if="previewFlags.empty" class="cex__flag">
+        <div v-if="previewFlags.empty" class="cex__flag cex__flag--high">
           <PetIcon name="alert" />
           <span>{{ previewFlags.empty }} 条消息清理后为空，不会写入电子书。</span>
-        </p>
-        <p v-if="previewFlags.unmatched" class="cex__flag">
+          <IconButton name="chevron-right" title="筛选查看这些消息" @click="setNavScope('empty')" />
+        </div>
+        <div v-if="previewFlags.unmatched" class="cex__flag">
           <PetIcon name="alert" />
           <span>{{ previewFlags.unmatched }} 条 AI 消息未匹配正文 / 标题规则，已回退为整段原文。</span>
-        </p>
-        <button v-if="navScope !== 'flagged'" type="button" class="cex__flaglink cex__flags-fix" @click="reviewFlagged">
-          逐条查看这 {{ previewFlags.flaggedTotal }} 条 →
-        </button>
+          <IconButton name="chevron-right" title="筛选查看这些消息" @click="setNavScope('unmatched')" />
+        </div>
       </div>
 
       <!-- Phase 3: after / before preview -->
@@ -889,7 +884,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             / {{ navMessages.length }} 条
           </span>
           <IconButton name="chevron-right" title="下一条" :disabled="focusIndex >= navMessages.length - 1" @click="focusNext" />
-          <Segmented class="cex__pvscope" :model-value="navScope" :options="navScopeOptions" @update:model-value="setNavScope" />
+          <Dropdown class="cex__pvscope" variant="inline" align="right" :model-value="navScope" :options="navScopeOptions" @update:model-value="setNavScope" />
         </div>
         <div class="cex__diff">
           <!-- After first — the result the user is verifying. -->
@@ -1508,7 +1503,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   color: var(--pet-color-accent-text);
   background: var(--pet-color-danger);
 }
-/* Health-flag banner — neutral attention (not an error): empties / unmatched counts. */
+/* Health-flag banner — one row per flag kind; severity differentiates empty vs unmatched. */
 .cex__flags {
   display: flex;
   flex-direction: column;
@@ -1520,7 +1515,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   align-items: center;
   gap: var(--pet-space-xs);
   margin: 0;
-  padding: var(--pet-space-sm) var(--pet-space-md);
+  padding: var(--pet-space-xs) var(--pet-space-sm) var(--pet-space-xs) var(--pet-space-md);
   font-size: var(--pet-font-size-xs);
   line-height: var(--pet-font-leading-normal);
   color: var(--pet-color-text);
@@ -1528,30 +1523,23 @@ async function onDrop(event: DragEvent): Promise<void> {
   border: 1px solid var(--pet-color-border);
   border-radius: var(--pet-radius-sm);
 }
-.cex__flag :deep(.pet-icon) {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  color: var(--pet-color-danger);
-}
 .cex__flag span {
   flex: 1;
   min-width: 0;
 }
-.cex__flaglink {
+/* The leading status glyph (direct child) — not the chevron IconButton. */
+.cex__flag > :deep(.pet-icon) {
   flex: none;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: var(--pet-color-accent);
-  cursor: pointer;
-  text-decoration: underline;
+  width: 14px;
+  height: 14px;
+  color: var(--pet-color-text-muted); /* unmatched = informational */
 }
-/* Banner footer: one shared route back to the rules step, where these are actually fixed. */
-.cex__flags-fix {
-  align-self: flex-start;
-  font-size: var(--pet-font-size-xs);
+/* Empty = serious (silent data loss): danger glyph + danger left rule. */
+.cex__flag--high {
+  border-left: 3px solid var(--pet-color-danger);
+}
+.cex__flag--high > :deep(.pet-icon) {
+  color: var(--pet-color-danger);
 }
 /* No extra top margin — the step lead's bottom margin already sets the gap, matching
    the other steps (was double-spaced). */
