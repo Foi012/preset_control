@@ -75,15 +75,23 @@ export function decorateInline(text: string, rules: ResolvedRule[]): string {
 }
 
 /**
+ * A standalone paragraph that's only a divider marker (`---`, `***`, `- - -`, `* * *`)
+ * → a real `<hr>`. Catches both the inserted 角色分隔线 and hand-typed scene breaks, so
+ * they render as a rule instead of literal text.
+ */
+const DIVIDER_RE = /^(?:-{3,}|\*{3,}|(?:-\s){2,}-|(?:\*\s){2,}\*)$/;
+
+/**
  * Body text → escaped `<p>` blocks (split on blank lines; single newlines → `<br/>`).
- * With styling `rules`, each paragraph's inner text is decorated with `<span class>`s.
+ * Divider-only paragraphs become `<hr class="cex-divider"/>`. With styling `rules`, each
+ * paragraph's inner text is decorated with `<span class>`s.
  */
 export function bodyToParagraphs(body: string, rules: ResolvedRule[] = []): string {
   return body
     .split(/\n{2,}/)
     .map(p => p.trim())
     .filter(Boolean)
-    .map(p => `<p>${rules.length ? decorateInline(p, rules) : escapeBr(p)}</p>`)
+    .map(p => (DIVIDER_RE.test(p) ? '<hr class="cex-divider"/>' : `<p>${rules.length ? decorateInline(p, rules) : escapeBr(p)}</p>`))
     .join('\n');
 }
 
@@ -140,4 +148,5 @@ export const BOOK_CSS = `body { margin: 5% 6%; line-height: 1.6; font-family: se
 h1 { font-size: 1.4em; margin: 0 0 0.8em; text-align: center; }
 p { margin: 0 0 0.9em; text-indent: 2em; }
 p.meta { text-align: center; text-indent: 0; color: #666; font-size: 0.9em; }
+hr.cex-divider { border: 0; border-top: 1px solid; opacity: 0.35; width: 30%; margin: 1.4em auto; }
 `;

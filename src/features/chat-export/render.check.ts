@@ -19,6 +19,9 @@ check('blank lines split paragraphs', bodyToParagraphs('一段\n\n二段'), '<p>
 check('single newline → <br/>', bodyToParagraphs('上\n下'), '<p>上<br/>下</p>');
 check('content is escaped in paragraphs', bodyToParagraphs('<x>&'), '<p>&lt;x&gt;&amp;</p>');
 check('empty body → no paragraphs', bodyToParagraphs('   '), '');
+check('role divider --- → <hr>', bodyToParagraphs('上\n\n---\n\n下'), '<p>上</p>\n<hr class="cex-divider"/>\n<p>下</p>');
+check('*** / spaced markers → <hr>', bodyToParagraphs('***\n\n* * *'), '<hr class="cex-divider"/>\n<hr class="cex-divider"/>');
+check('dashes inside a line are not a divider', bodyToParagraphs('a---b'), '<p>a---b</p>');
 check('meta line joins fields', metaLine({ time: '夜', loc: '松林' }), '<p class="meta">夜 · 松林</p>');
 check('empty meta → no line', metaLine({}), '');
 

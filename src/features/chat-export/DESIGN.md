@@ -69,6 +69,11 @@
 >   stays valid XHTML (the `xmllint`/缺层 guard the reference script lacks). `txt.ts` ignores styling (plain text).
 > - **Dark-mode caveat.** Presets default to `font-weight`/`font-style` (theme-safe); hardcoded `color` can vanish in a
 >   reader's night theme, so colored styling is left to the advanced CSS field, not a default preset.
+> - **Divider markers → `<hr>`.** A standalone paragraph that is only a divider marker (`---` / `***` / `- - -` /
+>   `* * *`) now renders as `<hr class="cex-divider">` (theme-safe CSS: `border-top` + `opacity`, so it follows the
+>   reader's text color in light/dark). This fixes the 角色分隔线 toggle, which previously emitted a literal `<p>---</p>`,
+>   and also catches hand-typed scene breaks (closes the earlier deferred block-level scene-break item). TXT keeps the
+>   literal marker.
 > - **Deferred:** a *styled* (rendered) preview in ③/④ — needs the preset CSS injected into the panel's shadow root;
 >   for now the preview stays plain text and the effect is verified in the exported file. Markdown rendering is a
 >   separate, larger follow-up (needs a conservative MD parser).
