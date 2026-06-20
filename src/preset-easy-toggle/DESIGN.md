@@ -6,7 +6,10 @@
 > **Files**
 >
 > - `DESIGN.md` — this spec (locked decisions, parsing rules, data model). Source of truth.
-> - `tokens.ts` — design-token SSOT → `--pet-*` CSS vars via `emitCssVars()`. Visuals deferred.
+> - `@/ui/` (`src/ui/`) — **shared design library**, the cross-tool SSOT (see _Design library_ note 2026-06-19).
+>   `tokens.ts` (design tokens → `--pet-*` CSS vars via `emitCssVars()`) + the shared primitives
+>   `Button` / `IconButton` / `ChipButton` / `Segmented` / `Dropdown` / `TextField` / `PetIcon`. `src/ui/` depends on
+>   nothing; both tools depend on it; tools never depend on each other.
 > - `types.ts` — parser + resolved-view types.
 > - `parser.ts` — **done.** Pure: `prompts[] → sections[] + allEntries[]` (region slice, full-preset selectable catalog,
 >   entry flags, rule guess).
@@ -53,6 +56,20 @@
 >
 > **Build order** (see end of file): 1 parser ✓ · 2 config ✓ · 3 preset I/O ✓ · 4 mount shell + trigger ✓ · 5 in-use
 > view ✓ · 6 edit view ✓ · 7 custom grouping ✓ (virtual overlay).
+>
+> **Design library extracted to `src/ui/` (2026-06-19):** The shared primitives + tokens moved out of
+> `preset-easy-toggle/` into a neutral **`src/ui/`** package, imported via the `@/ui/*` alias, so 聊天导出 can reuse them
+> without depending on the preset console (DESIGN boundary preserved: `src/ui/` → nothing; both tools → `src/ui/`;
+> tools ↛ each other). Moved: `tokens.ts`, `PetIcon`, `IconButton`, `ChipButton`, `Segmented`, `Dropdown`. **New
+> primitives:** `Button` (variants `primary`/`secondary`/`ghost`, sizes `sm`/`md`, optional leading/trailing icon),
+> `TextField` (`mono`/`invalid`/`compact`), and `Section` (generic collapsible — the reusable disclosure behind
+> `pet-section`'s look, `collapsible` prop for an always-open header; `SectionCard` stays preset-coupled and is *not*
+> the reusable one). Button uses `radius-sm` to match the console's rectangular-control convention (IconButton, Dropdown
+> field). Added `--pet-font-size-xxs` (10px) and the `alert` / `chevron-left` / `chevron-right` `PetIcon` glyphs. The
+> preset console's one-off `.pet-batch__primary` now uses `<Button size="sm">` (visually identical). The prefix stays
+> `--pet-`/`pet-` — it is the established token namespace, not worth churning. **Rule going forward:** new
+> buttons/chips/icon-buttons/inputs/selects/collapsibles compose `@/ui/*`; do not re-declare their styling in a feature
+> module.
 >
 > **Native extension fixes — Dropdown + ST panel sync (2026-06-19):** Two native-only bugs that did **not** appear in
 > the Tavern-Helper iframe build (different mount, different gateway) and so were missed in the port.

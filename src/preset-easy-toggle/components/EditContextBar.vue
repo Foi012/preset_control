@@ -7,8 +7,8 @@
  */
 import { computed } from 'vue';
 import { useConsoleStore, useUiStore } from '../store';
-import ChipButton from './ChipButton.vue';
-import PetIcon from './PetIcon.vue';
+import ChipButton from '@/ui/ChipButton.vue';
+import PetIcon from '@/ui/PetIcon.vue';
 
 const store = useConsoleStore();
 const ui = useUiStore();

@@ -7,7 +7,7 @@
  */
 import { ref } from 'vue';
 import { useConsoleStore, useUiStore } from '../store';
-import Dropdown, { type DropdownOption } from './Dropdown.vue';
+import Dropdown, { type DropdownOption } from '@/ui/Dropdown.vue';
 import EditView from './EditView.vue';
 import InUseView from './InUseView.vue';
 

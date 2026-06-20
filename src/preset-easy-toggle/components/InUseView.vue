@@ -3,8 +3,8 @@ import { computed, ref } from 'vue';
 import { flattenSectionEntries, flattenSections, folderState, inUseEntries, useConsoleStore, useUiStore } from '../store';
 import type { ModeSnapshot, ResolvedSection } from '../types';
 import { useHideOnScroll } from '../useHideOnScroll';
-import Dropdown from './Dropdown.vue';
-import IconButton from './IconButton.vue';
+import Dropdown from '@/ui/Dropdown.vue';
+import IconButton from '@/ui/IconButton.vue';
 import ModeBar from './ModeBar.vue';
 import SectionCard from './SectionCard.vue';
 

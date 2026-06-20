@@ -11,8 +11,8 @@ import {
 } from '../store';
 import type { ResolvedSection, SectionRule } from '../types';
 import EntryRow from './EntryRow.vue';
-import IconButton from './IconButton.vue';
-import PetIcon from './PetIcon.vue';
+import IconButton from '@/ui/IconButton.vue';
+import PetIcon from '@/ui/PetIcon.vue';
 import SelectMark from './SelectMark.vue';
 
 const props = withDefaults(

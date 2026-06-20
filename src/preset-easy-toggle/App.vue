@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useUiStore } from './store';
 import ChatExport from '../chat-export/ChatExport.vue';
-import IconButton from './components/IconButton.vue';
+import IconButton from '@/ui/IconButton.vue';
 import PresetConsole from './components/PresetConsole.vue';
 import ToolboxHome from './components/ToolboxHome.vue';
 import Trigger from './components/Trigger.vue';

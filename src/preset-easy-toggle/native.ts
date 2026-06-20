@@ -3,7 +3,7 @@ import { createApp, watch } from 'vue';
 import App from './App.vue';
 import { presetGatewayNative } from './preset-io-native';
 import { configurePresetGateway, flushAutosave, useConsoleStore, useUiStore, type ThemePref } from './store';
-import { emitCssVars, themeByName } from './tokens';
+import { emitCssVars, themeByName } from '@/ui/tokens';
 
 const POSITION_KEY = 'presetEasyTogglePosition';
 const THEME_KEY = 'presetEasyToggleTheme';

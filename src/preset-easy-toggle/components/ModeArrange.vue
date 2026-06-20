@@ -10,10 +10,11 @@ import { computed, ref } from 'vue';
 import { flattenSections, useConsoleStore, useUiStore } from '../store';
 import type { ResolvedSection } from '../types';
 import { useHideOnScroll } from '../useHideOnScroll';
-import Dropdown from './Dropdown.vue';
+import Button from '@/ui/Button.vue';
+import Dropdown from '@/ui/Dropdown.vue';
 import EditFolderNav from './EditFolderNav.vue';
 import EditGroupCard from './EditGroupCard.vue';
-import IconButton from './IconButton.vue';
+import IconButton from '@/ui/IconButton.vue';
 
 const props = defineProps<{ modeId: string }>();
 const store = useConsoleStore();
@@ -142,7 +143,7 @@ function rename(event: Event): void {
         <span class="pet-batch__count">已选 {{ toAdd.length }} 组</span>
       </label>
       <div class="pet-batch__actions">
-        <button type="button" class="pet-batch__primary" @click="addSelected">加入</button>
+        <Button size="sm" @click="addSelected">加入</Button>
         <Dropdown
           v-model="nestTargetId"
           :options="topLevelModeGroups"
@@ -358,15 +359,5 @@ function rename(event: Event): void {
   align-items: center;
   gap: var(--pet-space-xs);
   margin-left: auto;
-}
-.pet-batch__primary {
-  flex: none;
-  padding: var(--pet-space-xs) var(--pet-space-md);
-  font-size: var(--pet-font-size-xs);
-  color: var(--pet-color-accent-text);
-  background: var(--pet-color-accent);
-  border: 1px solid var(--pet-color-accent);
-  border-radius: var(--pet-radius-sm);
-  cursor: pointer;
 }
 </style>

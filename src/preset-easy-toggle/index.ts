@@ -16,7 +16,7 @@ import { createApp, watch } from 'vue';
 import { teleportStyle } from '@util/script';
 import App from './App.vue';
 import { flushAutosave, useConsoleStore, useUiStore, type ThemePref } from './store';
-import { emitCssVars, themeByName } from './tokens';
+import { emitCssVars, themeByName } from '@/ui/tokens';
 
 const POSITION_KEY = 'presetEasyTogglePosition';
 const THEME_KEY = 'presetEasyToggleTheme';
