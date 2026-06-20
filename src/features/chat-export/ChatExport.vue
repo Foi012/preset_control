@@ -325,9 +325,19 @@ const chapters = computed(() =>
     roleDivider: insertRoleDivider.value ? '---' : undefined,
   }),
 );
-const chaptersPreview = computed(() => chapters.value.slice(0, 5));
+// The chapter-list preview shows a window of PREVIEW_WINDOW chapters from `previewStart`,
+// so big books can be previewed past chapter 5. clampedStart keeps it in range.
+const PREVIEW_WINDOW = 5;
+const previewStart = ref(1);
+const clampedStart = computed(() => Math.min(Math.max(1, Math.floor(previewStart.value) || 1), Math.max(1, chapters.value.length)));
+const chaptersPreview = computed(() => chapters.value.slice(clampedStart.value - 1, clampedStart.value - 1 + PREVIEW_WINDOW));
+const previewEnd = computed(() => Math.min(chapters.value.length, clampedStart.value + PREVIEW_WINDOW - 1));
 const selectedChapterIndex = ref(1);
 const selectedChapter = computed(() => chapters.value.find(ch => ch.index === selectedChapterIndex.value) ?? chapters.value[0] ?? null);
+// Moving the window jumps the rendered preview to its first chapter.
+watch(clampedStart, s => {
+  selectedChapterIndex.value = s;
+});
 
 /**
  * A WYSIWYG render of the selected chapter for the ④ preview: the exact EPUB XHTML +
@@ -898,7 +908,13 @@ async function onDrop(event: DragEvent): Promise<void> {
           每章条数<TextField v-model="everyN" type="number" compact min="1" />
         </label>
 
-        <p class="cex__count">共 {{ chapters.length }} 章<span v-if="limitRange"> · 第 {{ rangeStart }}-{{ rangeEnd }} 条</span></p>
+        <div class="cex__chaphead">
+          <p class="cex__count">共 {{ chapters.length }} 章<span v-if="limitRange"> · 第 {{ rangeStart }}-{{ rangeEnd }} 条</span></p>
+          <label v-if="chapters.length > PREVIEW_WINDOW" class="cex__metafield cex__chapstart">
+            预览起始章
+            <TextField :model-value="String(clampedStart)" type="number" compact min="1" :max="chapters.length" @update:model-value="previewStart = Math.floor(Number($event)) || 1" />
+          </label>
+        </div>
         <ol class="cex__chaplist">
           <li v-for="ch in chaptersPreview" :key="ch.index">
             <button type="button" class="cex__chap" :class="{ 'cex__chap--active': selectedChapter?.index === ch.index }" @click="selectedChapterIndex = ch.index">
@@ -906,7 +922,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             </button>
           </li>
         </ol>
-        <p v-if="chapters.length > chaptersPreview.length" class="cex__more">…其余 {{ chapters.length - chaptersPreview.length }} 章</p>
+        <p v-if="chapters.length > PREVIEW_WINDOW" class="cex__more">显示第 {{ clampedStart }}–{{ previewEnd }} 章（共 {{ chapters.length }} 章）</p>
         <div v-if="selectedChapter" class="cex__chappreview">
           <div class="cex__pvhead">
             <span class="cex__panelabel">{{ selectedChapter.title }}</span>
@@ -1287,6 +1303,24 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-size: var(--pet-font-size-sm);
   font-weight: var(--pet-font-weight-medium);
   color: var(--pet-color-text);
+}
+/* Chapter-list head: 共 N 章 on the left, 预览起始章 input on the right. */
+.cex__chaphead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pet-space-sm);
+}
+.cex__chaphead .cex__count {
+  margin: var(--pet-space-md) 0 var(--pet-space-sm);
+}
+.cex__chapstart {
+  flex: none;
+  gap: var(--pet-space-xs);
+  margin-top: 0;
+}
+.cex__chapstart :deep(.pet-field) {
+  width: 4.5em;
 }
 /* Section description — one calm line under a Section header, above its controls. */
 .cex__desc {
