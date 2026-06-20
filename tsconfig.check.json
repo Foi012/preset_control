@@ -6,5 +6,9 @@
     "types": [],
     "outDir": "dist-check"
   },
-  "include": ["src/preset-easy-toggle/**/*.ts", "src/preset-easy-toggle/**/*.json"]
+  "include": [
+    "src/features/preset-console/**/*.ts",
+    "src/features/preset-console/**/*.json",
+    "src/features/chat-export/**/*.ts"
+  ]
 }
