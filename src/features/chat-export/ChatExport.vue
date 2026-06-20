@@ -8,7 +8,7 @@
  * matched span to the chapter title (`config.title`). A 扫描标签 scanner feeds 排除/正文.
  * Richer before/after preview, chapters and EPUB are Phases 3–5. See `DESIGN.md`.
  */
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import Button from '@/ui/Button.vue';
 import Segmented from '@/ui/Segmented.vue';
 import IconButton from '@/ui/IconButton.vue';
@@ -34,7 +34,13 @@ const loading = ref(false);
 const dragging = ref(false);
 const includeUser = ref(true);
 const includeHidden = ref(true);
+const insertRoleDivider = ref(false);
+const limitRange = ref(false);
+const rangeStart = ref(1);
+const rangeEnd = ref(1);
+const availableMessageCount = ref(0);
 const fileInput = ref<HTMLInputElement | null>(null);
+const coverInput = ref<HTMLInputElement | null>(null);
 
 // Phase 3 (UX) — split the dense page into steps with a top stepper. Free nav with
 // gating: 规则/预览 unlock once a chat is loaded; 导出 lands in Phase 4/5.
@@ -151,8 +157,11 @@ function removeTitle(i: number): void {
 }
 
 // Tag scanner — list every balanced tag in the chat so the user can click it into a
-// bucket. Gated on `showScan` so a big chat isn't re-scanned while the panel is shut.
-const showScan = ref(false);
+// bucket. Gated on the scan section disclosure so a big chat isn't re-scanned while
+// the section is shut.
+const showScan = ref(true);
+const showInclude = ref(false);
+const showExclude = ref(false);
 const scannedTags = computed(() => (showScan.value ? scanTags(messages.value.map(m => m.content)) : []));
 
 // A scanned tag is routed to at most ONE bucket — 不处理 / 排除 / 正文 — so a tag can
@@ -255,6 +264,12 @@ function resetNav(): void {
 const bookTitle = ref('');
 const bookAuthor = ref('');
 const bookLang = ref('zh');
+const includeCover = ref(false);
+const coverName = ref('');
+const coverPreviewUrl = ref('');
+const coverData = ref<Uint8Array | null>(null);
+const coverError = ref('');
+const coverDragging = ref(false);
 type ChapterRuleKind = 'per-assistant' | 'per-message' | 'title' | 'every';
 const chapterRuleKind = ref<ChapterRuleKind>('per-assistant');
 const everyN = ref(5);
@@ -275,13 +290,31 @@ const LANG_OPTIONS = [
 const chapterRule = computed<ChapterRule>(() =>
   chapterRuleKind.value === 'every' ? { kind: 'every', n: everyN.value } : { kind: chapterRuleKind.value },
 );
-const chapters = computed(() => buildChapters(messages.value, config.value, chapterRule.value));
-const chaptersPreview = computed(() => chapters.value.slice(0, 30));
+const chapters = computed(() =>
+  buildChapters(messages.value, config.value, chapterRule.value, {
+    roleDivider: insertRoleDivider.value ? '---' : undefined,
+  }),
+);
+const chaptersPreview = computed(() => chapters.value.slice(0, 5));
+const selectedChapterIndex = ref(1);
+const selectedChapter = computed(() => chapters.value.find(ch => ch.index === selectedChapterIndex.value) ?? chapters.value[0] ?? null);
+const rangeSummary = computed(() =>
+  limitRange.value && availableMessageCount.value
+    ? `导出第 ${rangeStart.value}-${rangeEnd.value} 条，共 ${messages.value.length} 条`
+    : `当前共 ${availableMessageCount.value} 条`,
+);
 
 const bookMeta = computed<BookMeta>(() => ({
   title: bookTitle.value.trim() || '未命名',
   author: bookAuthor.value.trim(),
   language: bookLang.value,
+  cover: includeCover.value && coverData.value
+    ? {
+        data: coverData.value,
+        mediaType: 'image/jpeg',
+        href: 'cover.jpg',
+      }
+    : null,
 }));
 
 /** Default the book title to the character (assistant) name once a chat is read. */
@@ -314,6 +347,82 @@ function exportEpub(): void {
   download(`${bookMeta.value.title}.epub`, buildEpub(chapters.value, bookMeta.value), 'application/epub+zip');
 }
 
+function revokeCoverPreview(): void {
+  if (coverPreviewUrl.value) URL.revokeObjectURL(coverPreviewUrl.value);
+  coverPreviewUrl.value = '';
+}
+
+async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+async function processCover(file: File): Promise<void> {
+  coverError.value = '';
+  if (!file.type.startsWith('image/')) {
+    coverError.value = '请选择图片文件。';
+    return;
+  }
+
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.decoding = 'async';
+    const loaded = new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('image load failed'));
+    });
+    img.src = url;
+    await loaded;
+
+    const maxEdge = 1600;
+    const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+    const width = Math.max(1, Math.round(img.naturalWidth * scale));
+    const height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('canvas unavailable');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.86));
+    if (!blob) throw new Error('cover encode failed');
+    coverData.value = await blobToUint8Array(blob);
+    coverName.value = file.name;
+    revokeCoverPreview();
+    coverPreviewUrl.value = URL.createObjectURL(blob);
+  } catch {
+    coverError.value = '封面处理失败。';
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function onCoverFile(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  await processCover(file);
+  input.value = '';
+}
+
+async function onCoverDrop(event: DragEvent): Promise<void> {
+  coverDragging.value = false;
+  const file = event.dataTransfer?.files?.[0];
+  if (file) await processCover(file);
+}
+
+function clearCover(): void {
+  coverName.value = '';
+  coverData.value = null;
+  coverError.value = '';
+  revokeCoverPreview();
+}
+watch(chapters, now => {
+  if (!now.some(ch => ch.index === selectedChapterIndex.value)) selectedChapterIndex.value = now[0]?.index ?? 1;
+});
+
 // Remember the rule set across sessions (best-effort; opaque-origin storage is fine to fail).
 const RULES_KEY = 'cexRules';
 function saveRules(): void {
@@ -326,6 +435,10 @@ function saveRules(): void {
         exclude: excludeRules.value,
         include: includeRules.value,
         title: titleRules.value,
+        insertRoleDivider: insertRoleDivider.value,
+        limitRange: limitRange.value,
+        rangeStart: rangeStart.value,
+        rangeEnd: rangeEnd.value,
         chapterRuleKind: chapterRuleKind.value,
         everyN: everyN.value,
       }),
@@ -344,6 +457,10 @@ function loadRules(): void {
     if (Array.isArray(d.exclude)) excludeRules.value = d.exclude.filter((x: unknown) => typeof x === 'string');
     if (Array.isArray(d.include)) includeRules.value = d.include.filter((x: unknown) => typeof x === 'string');
     if (Array.isArray(d.title)) titleRules.value = d.title.filter((x: unknown) => typeof x === 'string');
+    if (typeof d.insertRoleDivider === 'boolean') insertRoleDivider.value = d.insertRoleDivider;
+    if (typeof d.limitRange === 'boolean') limitRange.value = d.limitRange;
+    if (Number.isFinite(d.rangeStart)) rangeStart.value = d.rangeStart;
+    if (Number.isFinite(d.rangeEnd)) rangeEnd.value = d.rangeEnd;
     if (['per-assistant', 'per-message', 'title', 'every'].includes(d.chapterRuleKind)) chapterRuleKind.value = d.chapterRuleKind;
     if (Number.isFinite(d.everyN)) everyN.value = d.everyN;
   } catch {
@@ -351,7 +468,13 @@ function loadRules(): void {
   }
 }
 onMounted(loadRules);
-watch([stripReasoning, stripOOC, excludeRules, includeRules, titleRules, chapterRuleKind, everyN], saveRules, { deep: true });
+onUnmounted(revokeCoverPreview);
+watch([stripReasoning, stripOOC, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN], saveRules, {
+  deep: true,
+});
+watch([limitRange, rangeStart, rangeEnd], () => {
+  if (rawMessages.value.length) applyFilters();
+});
 
 /** Assistant turns whose 正文/标题 rules matched nothing (the 缺层 warning). */
 const unmatchedCount = computed(() => {
@@ -365,10 +488,15 @@ const unmatchedCount = computed(() => {
 function applyFilters(): void {
   // System / narrator messages (/sys, /comment) are never wanted in an e-book, so
   // they stay excluded (normalize defaults includeSystem to false) — no UI toggle.
-  messages.value = normalizeMessages(rawMessages.value, {
+  const normalized = normalizeMessages(rawMessages.value, {
     includeUser: includeUser.value,
     includeHidden: includeHidden.value,
   });
+  availableMessageCount.value = normalized.length;
+  if (rangeEnd.value < 1 || rangeEnd.value > availableMessageCount.value) rangeEnd.value = availableMessageCount.value || 1;
+  rangeStart.value = Math.min(Math.max(1, Math.floor(Number(rangeStart.value) || 1)), Math.max(availableMessageCount.value, 1));
+  rangeEnd.value = Math.min(Math.max(rangeStart.value, Math.floor(Number(rangeEnd.value) || rangeStart.value)), Math.max(availableMessageCount.value, 1));
+  messages.value = limitRange.value ? normalized.slice(rangeStart.value - 1, rangeEnd.value) : normalized;
   resetNav();
   seedBookMeta();
 }
@@ -381,6 +509,7 @@ async function readActiveChat(): Promise<void> {
     applyFilters();
     sourceLabel.value = '当前聊天';
     if (messages.value.length === 0) error.value = '未读取到聊天消息（确认 SillyTavern 已打开一段对话）。';
+    else step.value = 'rules';
   } catch {
     error.value = '读取当前聊天失败。';
   } finally {
@@ -396,6 +525,7 @@ async function readJsonlText(text: string, label: string): Promise<void> {
     applyFilters();
     sourceLabel.value = label;
     if (messages.value.length === 0) error.value = '该文件未解析出任何消息。';
+    else step.value = 'rules';
   } finally {
     loading.value = false;
   }
@@ -497,72 +627,67 @@ async function onDrop(event: DragEvent): Promise<void> {
       <h2 class="cex__title">整理规则</h2>
       <p class="cex__lead">挑出要进书的内容，去掉不想要的部分。</p>
 
-      <!-- Scanner on top (always shown): its results route into 包含 / 排除 below. -->
-      <Section title="扫描标签" :collapsible="false" size="sm">
-        <template #badges>
-          <Button variant="ghost" size="sm" icon="trash" :disabled="!hasAnyRule" @click="clearAllRules">清除</Button>
-          <Button variant="secondary" size="sm" icon="refresh" @click="showScan = !showScan">
-            {{ showScan ? '收起结果' : '扫描标签' }}
-          </Button>
-        </template>
-        <p v-if="!showScan" class="cex__desc">列出聊天里成对出现的标签，逐个标记成 排除 或 包含。</p>
+      <!-- Scanner on top: quick scan routes tags into 包含 / 排除 below. -->
+      <Section v-model:open="showScan" title="扫描" :default-open="true" size="sm">
+        <p v-if="!scannedTags.length" class="cex__hint">未发现成对标签。</p>
         <template v-else>
-          <p v-if="!scannedTags.length" class="cex__hint">未发现成对标签。</p>
-          <template v-else>
-            <!-- Header row: select-all master, swapped in-place for the batch control
-                 once tags are selected (so it never pushes the list down). -->
-            <div class="cex__scanhead">
-              <button type="button" class="cex__scanpick cex__scanall" @click="toggleSelectAll">
-                <SelectMark type="checkbox" :state="selectAllState" />
-                <span class="cex__scanall-label">全选</span>
+          <!-- Header row: keep the batch control mounted so selecting rows never
+               changes the toolbar height. -->
+          <div class="cex__scanhead">
+            <button type="button" class="cex__scanpick cex__scanall" @click="toggleSelectAll">
+              <SelectMark type="checkbox" :state="selectAllState" size="sm" />
+              <span class="cex__scanall-label">全选</span>
+            </button>
+            <div class="cex__scanbatch" :class="{ 'cex__scanbatch--idle': !selectedTags.length }" :aria-hidden="!selectedTags.length">
+              <span class="cex__scanbatch-count">{{ selectedTags.length ? `已选 ${selectedTags.length} 项` : '未选择' }}</span>
+              <Segmented
+                size="sm"
+                :model-value="''"
+                :options="SCAN_BUCKETS"
+                :disabled="!selectedTags.length"
+                @update:model-value="applyBucketToSelected($event as TagBucket)"
+              />
+            </div>
+          </div>
+          <div class="cex__scanlist">
+            <div v-for="t in scannedTags" :key="t.tag" class="cex__scanrow">
+              <button type="button" class="cex__scanpick" @click="toggleTagSelect(t.tag)">
+                <SelectMark type="checkbox" :state="selectedTags.includes(t.tag) ? 'on' : 'off'" size="sm" />
+                <code class="cex__scantag">&lt;{{ t.tag }}&gt;</code>
+                <span class="cex__scancount">×{{ t.count }}</span>
               </button>
-              <template v-if="selectedTags.length">
-                <span class="cex__scanbatch-count">已选 {{ selectedTags.length }} 项</span>
-                <Segmented
-                  size="sm"
-                  :model-value="''"
-                  :options="SCAN_BUCKETS"
-                  @update:model-value="applyBucketToSelected($event as TagBucket)"
-                />
-              </template>
+              <Segmented
+                size="sm"
+                :model-value="tagBucket(t.tag)"
+                :options="SCAN_BUCKETS"
+                @update:model-value="setTagBucket(t.tag, $event)"
+              />
             </div>
-            <div class="cex__scanlist">
-              <div v-for="t in scannedTags" :key="t.tag" class="cex__scanrow">
-                <button type="button" class="cex__scanpick" @click="toggleTagSelect(t.tag)">
-                  <SelectMark type="checkbox" :state="selectedTags.includes(t.tag) ? 'on' : 'off'" />
-                  <code class="cex__scantag">&lt;{{ t.tag }}&gt;</code>
-                  <span class="cex__scancount">×{{ t.count }}</span>
-                </button>
-                <Segmented
-                  size="sm"
-                  :model-value="tagBucket(t.tag)"
-                  :options="SCAN_BUCKETS"
-                  @update:model-value="setTagBucket(t.tag, $event)"
-                />
-              </div>
-            </div>
-          </template>
+          </div>
         </template>
       </Section>
 
       <!-- INCLUDE — which messages go in, and which spans become body / title. -->
-      <Section title="包含内容" size="sm">
-        <p class="cex__desc">选择哪些楼层进书，以及每段保留哪些内容作为正文 / 标题。</p>
-        <div class="cex__opts">
+      <Section v-model:open="showInclude" title="包含内容" :default-open="false" size="sm">
+        <p class="cex__desc">选择哪些楼层进书，以及每段保留哪些内容作为标题 / 正文。</p>
+        <div class="cex__opts cex__opts--inline">
           <label class="cex__opt"><input type="checkbox" v-model="includeUser" @change="applyFilters" /> 包含用户发言</label>
           <label class="cex__opt" title="被 /hide 隐藏的真实楼层（常为省 token 而隐藏，通常仍要收进书里）">
             <input type="checkbox" v-model="includeHidden" @change="applyFilters" /> 包含隐藏楼层
           </label>
+          <label class="cex__opt" title="导出时在用户与 AI 楼层切换处插入分隔线">
+            <input type="checkbox" v-model="insertRoleDivider" /> 角色分隔线
+          </label>
         </div>
-        <RuleField
-          label="正文"
-          v-model="includeDraft"
-          :rules="includeRules"
-          :error="includeDraftError"
-          placeholder="标签名 正文 / body，或正则 — 回车添加"
-          @add="addInclude"
-          @remove="removeInclude"
-        />
+        <div class="cex__range">
+          <label class="cex__opt"><input type="checkbox" v-model="limitRange" /> 限制楼层范围</label>
+          <div class="cex__range-fields" :class="{ 'cex__range-fields--off': !limitRange }">
+            <TextField v-model="rangeStart" class="cex__range-input" type="number" compact min="1" :max="availableMessageCount" :disabled="!limitRange" />
+            <span class="cex__range-sep">-</span>
+            <TextField v-model="rangeEnd" class="cex__range-input" type="number" compact min="1" :max="availableMessageCount" :disabled="!limitRange" />
+          </div>
+          <span class="cex__range-count" :title="rangeSummary">{{ rangeSummary }}</span>
+        </div>
         <RuleField
           label="标题"
           v-model="titleDraft"
@@ -572,11 +697,20 @@ async function onDrop(event: DragEvent): Promise<void> {
           @add="addTitle"
           @remove="removeTitle"
         />
+        <RuleField
+          label="正文"
+          v-model="includeDraft"
+          :rules="includeRules"
+          :error="includeDraftError"
+          placeholder="标签名 正文 / body，或正则 — 回车添加"
+          @add="addInclude"
+          @remove="removeInclude"
+        />
         <p v-if="unmatchedCount" class="cex__warn">⚠ {{ unmatchedCount }} 条 AI 楼层未匹配规则（正文回退为整段）。</p>
       </Section>
 
       <!-- EXCLUDE — strip spans out of every message (presets + custom rules). -->
-      <Section title="排除内容" size="sm">
+      <Section v-model:open="showExclude" title="排除内容" :default-open="false" size="sm">
         <p class="cex__desc">从每条消息中删除以下内容，不写进书里。</p>
         <div class="cex__opts">
           <label class="cex__opt"><input type="checkbox" v-model="stripReasoning" /> 去除推理块 &lt;think&gt;</label>
@@ -667,6 +801,32 @@ async function onDrop(event: DragEvent): Promise<void> {
         <label class="cex__metafield">语言
           <Dropdown v-model="bookLang" class="cex__field-grow" :options="LANG_OPTIONS" />
         </label>
+        <div class="cex__coverfield">
+          <label class="cex__opt"><input type="checkbox" v-model="includeCover" /> 添加封面</label>
+          <div
+            v-if="includeCover"
+            class="cex__coverdrop"
+            :class="{ 'cex__coverdrop--over': coverDragging }"
+            @click="coverInput?.click()"
+            @dragover.prevent.stop="coverDragging = true"
+            @dragleave.prevent.stop="coverDragging = false"
+            @drop.prevent.stop="onCoverDrop"
+          >
+            <button type="button" class="cex__cover-thumb" :class="{ 'cex__cover-thumb--empty': !coverPreviewUrl }">
+                <img v-if="coverPreviewUrl" :src="coverPreviewUrl" alt="" />
+                <PetIcon v-else name="upload" />
+            </button>
+            <div class="cex__cover-main">
+              <p class="cex__cover-name">{{ coverData ? `${coverName}（已压缩）` : '把图片拖到这里' }}</p>
+              <div class="cex__cover-actions" @click.stop>
+                <Button size="sm" variant="secondary" icon="upload" @click="coverInput?.click()">{{ coverData ? '更换封面' : '上传封面' }}</Button>
+                <Button v-if="coverData" size="sm" variant="ghost" @click="clearCover">移除封面</Button>
+              </div>
+              <p v-if="coverError" class="cex__warn">{{ coverError }}</p>
+            </div>
+          </div>
+          <input ref="coverInput" class="cex__file" type="file" accept="image/*" @change="onCoverFile" />
+        </div>
       </Section>
 
       <Section title="章节切分" :collapsible="false" size="sm">
@@ -681,14 +841,22 @@ async function onDrop(event: DragEvent): Promise<void> {
           每章条数<TextField v-model="everyN" type="number" compact min="1" />
         </label>
 
-        <p class="cex__count">共 {{ chapters.length }} 章</p>
+        <p class="cex__count">共 {{ chapters.length }} 章<span v-if="limitRange"> · 第 {{ rangeStart }}-{{ rangeEnd }} 条</span></p>
         <ol class="cex__chaplist">
-          <li v-for="ch in chaptersPreview" :key="ch.index" class="cex__chap">
-            <span class="cex__chaptitle">{{ ch.index }}. {{ ch.title }}</span>
-            <span class="cex__chapbody">{{ snippet(ch.body) }}</span>
+          <li v-for="ch in chaptersPreview" :key="ch.index">
+            <button type="button" class="cex__chap" :class="{ 'cex__chap--active': selectedChapter?.index === ch.index }" @click="selectedChapterIndex = ch.index">
+              <span class="cex__chaptitle">{{ ch.index }}. {{ ch.title }}</span>
+            </button>
           </li>
         </ol>
         <p v-if="chapters.length > chaptersPreview.length" class="cex__more">…其余 {{ chapters.length - chaptersPreview.length }} 章</p>
+        <div v-if="selectedChapter" class="cex__chappreview">
+          <div class="cex__pvhead">
+            <span class="cex__panelabel">{{ selectedChapter.title }}</span>
+            <span class="cex__field">第 {{ selectedChapter.index }} 章</span>
+          </div>
+          <div class="cex__panebody cex__chappreview-body">{{ selectedChapter.body }}</div>
+        </div>
       </Section>
     </section>
     </div>
@@ -703,8 +871,9 @@ async function onDrop(event: DragEvent): Promise<void> {
         <Button variant="ghost" :disabled="!chapters.length" @click="exportTxt">导出 TXT</Button>
         <Button icon="download" :disabled="!chapters.length" @click="exportEpub">导出 EPUB</Button>
       </template>
+      <Button v-if="step === 'rules'" variant="ghost" :disabled="!hasAnyRule" @click="clearAllRules">清除规则</Button>
       <Button
-        v-else-if="nextStep"
+        v-if="nextStep"
         icon-right="chevron-right"
         :disabled="!stepEnabled(nextStep.id)"
         @click="goNextStep"
@@ -962,6 +1131,10 @@ async function onDrop(event: DragEvent): Promise<void> {
   gap: var(--pet-space-sm) var(--pet-space-md);
   margin-top: var(--pet-space-md);
 }
+.cex__opts--inline {
+  flex-wrap: nowrap;
+  gap: var(--pet-space-sm);
+}
 .cex__opt {
   display: flex;
   align-items: center;
@@ -969,6 +1142,55 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-size: var(--pet-font-size-sm);
   color: var(--pet-color-text-muted);
   cursor: pointer;
+}
+.cex__opts--inline .cex__opt {
+  gap: var(--pet-space-xs);
+  font-size: var(--pet-font-size-xs);
+  white-space: nowrap;
+}
+.cex__range {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--pet-space-sm);
+  margin-top: var(--pet-space-sm);
+  padding-bottom: var(--pet-space-sm);
+  border-bottom: 1px solid color-mix(in srgb, var(--pet-color-border), transparent 55%);
+}
+.cex__range > .cex__opt {
+  flex: none;
+}
+.cex__range-fields {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pet-space-xs);
+  width: 98px;
+  flex: none;
+  transition: opacity var(--pet-motion-fast) var(--pet-motion-ease);
+}
+.cex__range-fields--off {
+  opacity: 0.38;
+}
+.cex__range-fields :deep(.cex__range-input) {
+  width: 44px;
+  padding: 2px var(--pet-space-xs);
+  text-align: center;
+}
+.cex__range-fields :deep(.cex__range-input:disabled) {
+  color: var(--pet-color-text-muted);
+  cursor: default;
+}
+.cex__range-sep,
+.cex__range-count {
+  font-size: var(--pet-font-size-xs);
+  color: var(--pet-color-text-faint);
+}
+.cex__range-count {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cex__count {
   margin: var(--pet-space-md) 0 var(--pet-space-sm);
@@ -983,23 +1205,17 @@ async function onDrop(event: DragEvent): Promise<void> {
   line-height: var(--pet-font-leading-normal);
   color: var(--pet-color-text-muted);
 }
-/* Scan results — capped height so a long tag list stays scannable, not endless. */
+/* Scan results — flat rows, matching preset-edit's edit list treatment. */
 .cex__scanlist {
-  margin-top: var(--pet-space-sm);
+  margin-top: var(--pet-space-xs);
   max-height: 220px;
   overflow-y: auto;
-  border: 1px solid var(--pet-color-border);
-  border-radius: var(--pet-radius-sm);
-  background: var(--pet-color-surface);
 }
 .cex__scanrow {
   display: flex;
   align-items: center;
   gap: var(--pet-space-sm);
-  padding: var(--pet-space-xs) var(--pet-space-sm);
-}
-.cex__scanrow:not(:last-child) {
-  border-bottom: 1px solid var(--pet-color-border);
+  padding: var(--pet-space-xs) 0;
 }
 /* Clickable select area — mark + tag + count toggle row selection; takes the row width
    so the Segmented sits at the right. `min-width: 0` lets a long tag truncate (mobile). */
@@ -1033,24 +1249,40 @@ async function onDrop(event: DragEvent): Promise<void> {
   flex: none;
 }
 .cex__scanall-label {
-  font-size: var(--pet-font-size-xs);
-  color: var(--pet-color-text-muted);
+  font-size: var(--pet-font-size-sm);
+  color: var(--pet-color-text);
 }
-/* Scanner header row — holds the description, swapped in-place for the batch control
-   once tags are selected. Fixed min-height so the swap never shifts the list below. */
+.cex__scanbatch {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--pet-space-sm);
+  flex: 1;
+  min-width: 0;
+  min-height: 28px;
+}
+.cex__scanbatch--idle {
+  visibility: hidden;
+  pointer-events: none;
+}
+/* Scanner header row — same left alignment as rows; the only divider is between
+   this batch toolbar and the tag content. */
 .cex__scanhead {
   display: flex;
   align-items: center;
   gap: var(--pet-space-sm);
-  min-height: 26px;
+  min-height: 36px;
+  padding: var(--pet-space-xs) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--pet-color-border), transparent 55%);
 }
 .cex__scanhead .cex__desc {
   margin: 0;
 }
 .cex__scanbatch-count {
-  flex: 1;
+  flex: none;
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text-muted);
+  white-space: nowrap;
 }
 .cex__hint {
   margin: var(--pet-space-sm) 0 0;
@@ -1213,6 +1445,69 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-size: var(--pet-font-size-sm);
   color: var(--pet-color-text-muted);
 }
+.cex__coverfield {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pet-space-sm);
+  margin-top: var(--pet-space-sm);
+}
+.cex__coverdrop {
+  display: flex;
+  align-items: center;
+  gap: var(--pet-space-md);
+  min-height: 104px;
+  padding: var(--pet-space-sm);
+  border: 1.5px dashed var(--pet-color-border-strong);
+  border-radius: var(--pet-radius-sm);
+  cursor: pointer;
+  transition:
+    border-color var(--pet-motion-fast) var(--pet-motion-ease),
+    background var(--pet-motion-fast) var(--pet-motion-ease);
+}
+.cex__coverdrop--over {
+  border-color: var(--pet-color-accent);
+  background: color-mix(in srgb, var(--pet-color-accent), transparent 92%);
+}
+.cex__cover-thumb {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 88px;
+  flex: none;
+  padding: 0;
+  overflow: hidden;
+  color: var(--pet-color-text-faint);
+  background: var(--pet-color-surface);
+  border: 1px solid var(--pet-color-border-strong);
+  border-radius: var(--pet-radius-sm);
+  cursor: pointer;
+}
+.cex__cover-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cex__cover-thumb--empty {
+  border-style: dashed;
+}
+.cex__cover-main {
+  flex: 1;
+  min-width: 0;
+}
+.cex__cover-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--pet-space-sm);
+}
+.cex__cover-name {
+  margin: 0 0 var(--pet-space-sm);
+  font-size: var(--pet-font-size-sm);
+  color: var(--pet-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* Field that fills the rest of a 书籍信息 row after its inline label. */
 .cex__field-grow {
   flex: 1;
@@ -1233,15 +1528,22 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .cex__chap {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--pet-space-sm);
-  border-bottom: 1px solid var(--pet-color-border);
+  width: 100%;
+  padding: var(--pet-space-xs) 0;
+  color: var(--pet-color-text-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.cex__chap--active .cex__chaptitle,
+.cex__chap:hover .cex__chaptitle {
+  color: var(--pet-color-text);
 }
 .cex__chaptitle {
   font-size: var(--pet-font-size-xs);
   font-weight: var(--pet-font-weight-medium);
-  color: var(--pet-color-text);
+  color: inherit;
 }
 .cex__chapbody {
   font-size: var(--pet-font-size-xs);
@@ -1254,5 +1556,11 @@ async function onDrop(event: DragEvent): Promise<void> {
   margin: var(--pet-space-sm) 0 0;
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text-faint);
+}
+.cex__chappreview {
+  margin-top: var(--pet-space-sm);
+}
+.cex__chappreview-body {
+  max-height: 140px;
 }
 </style>

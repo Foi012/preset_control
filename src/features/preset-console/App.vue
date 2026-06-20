@@ -36,8 +36,8 @@ function emitDragEvent(name: string, event: PointerEvent): void {
   />
 
   <!-- Open: the toolbox shell — header + the active tool fills the body. -->
-  <section v-else class="pet-panel">
-    <header class="pet-panel__bar">
+  <section v-else class="pet-panel" :class="{ 'pet-panel--home': ui.activeTool === 'home' }">
+    <header v-if="ui.activeTool !== 'home'" class="pet-panel__bar">
       <IconButton
         v-if="ui.activeTool !== 'home'"
         name="arrow-left"
@@ -79,6 +79,10 @@ function emitDragEvent(name: string, event: PointerEvent): void {
   backdrop-filter: blur(var(--pet-effect-glass-blur)) saturate(1.25);
   overflow: hidden;
   background-clip: padding-box;
+}
+.pet-panel--home {
+  background: var(--pet-color-surface-glass);
+  border-radius: var(--pet-radius-md);
 }
 .pet-panel__bar {
   display: flex;

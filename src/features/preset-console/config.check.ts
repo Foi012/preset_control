@@ -1,7 +1,7 @@
 /**
  * Lightweight check for the config layer (read / validate / merge) against the
  * trimmed fixture. Mirrors {@link ./parser.check.ts}; no test runner is configured.
- * Run: npx ts-node --transpile-only -P tsconfig.novelizer.json src/preset-easy-toggle/config.check.ts
+ * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/preset-console/config.check.ts
  */
 import { CONFIG_ENTRY_NAME, defaultConfig, readConfig, resolveView, serializeConfig } from './config';
 import type { Config } from './config';

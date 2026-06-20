@@ -36,8 +36,10 @@ const TOOLS: ToolCard[] = [
 .pet-home {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: var(--pet-space-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pet-space-xs);
 }
 .pet-home__grid {
   list-style: none;
@@ -45,19 +47,20 @@ const TOOLS: ToolCard[] = [
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--pet-space-sm);
+  gap: 2px;
+  width: 100%;
 }
 .pet-home__card {
   display: flex;
   align-items: center;
-  gap: var(--pet-space-md);
+  gap: var(--pet-space-sm);
   width: 100%;
-  padding: var(--pet-space-md);
+  padding: var(--pet-space-xs);
   text-align: left;
   color: var(--pet-color-text);
-  background: var(--pet-color-surface-raised);
-  border: 1px solid var(--pet-color-border);
-  border-radius: var(--pet-radius-lg);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--pet-radius-sm);
   cursor: pointer;
   transition:
     border-color var(--pet-motion-fast) var(--pet-motion-ease),
@@ -65,22 +68,25 @@ const TOOLS: ToolCard[] = [
 }
 .pet-home__card:hover {
   border-color: var(--pet-color-accent);
-  background: color-mix(in srgb, var(--pet-color-accent), transparent 90%);
+  background: color-mix(in srgb, var(--pet-color-accent), transparent 92%);
 }
 .pet-home__icon {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   flex: none;
-  color: var(--pet-color-accent-text);
-  background: var(--pet-color-accent);
-  border-radius: var(--pet-radius-md);
+  color: var(--pet-color-accent);
+  background: color-mix(in srgb, var(--pet-color-accent), transparent 88%);
+  border-radius: var(--pet-radius-sm);
+}
+.pet-home__icon :deep(.pet-icon) {
+  width: 16px;
+  height: 16px;
 }
 .pet-home__text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   min-width: 0;
 }
 .pet-home__title {
@@ -88,7 +94,6 @@ const TOOLS: ToolCard[] = [
   font-weight: var(--pet-font-weight-semibold);
 }
 .pet-home__desc {
-  font-size: var(--pet-font-size-xs);
-  color: var(--pet-color-text-muted);
+  display: none;
 }
 </style>

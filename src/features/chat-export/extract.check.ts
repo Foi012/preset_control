@@ -1,6 +1,6 @@
 /**
  * Lightweight check for the two-bucket strip/extract engine.
- * Run: npx ts-node --transpile-only -P tsconfig.check.json src/chat-export/extract.check.ts
+ * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/extract.check.ts
  */
 import { parseRegex, asTagName, ruleError, stripExcludes, extractMessage } from './extract';
 

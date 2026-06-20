@@ -1,7 +1,7 @@
 /**
  * Lightweight check for the chat normalizer against the trimmed `.jsonl` fixture.
- * Mirrors `src/preset-easy-toggle/parser.check.ts`; no test runner is configured.
- * Run: npx ts-node --transpile-only -P tsconfig.check.json src/chat-export/normalize.check.ts
+ * Mirrors `src/features/preset-console/parser.check.ts`; no test runner is configured.
+ * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/normalize.check.ts
  */
 import { parseJsonl, normalizeMessages, activeSwipeText, isGenuineSystem } from './normalize';
 import { sampleJsonl } from './__fixtures__/chat-jsonl';

@@ -7,13 +7,14 @@ import webpack from 'webpack';
 
 const root = import.meta.dirname;
 const extensionName = 'preset-easy-toggle-extension';
+const extensionSourceDir = path.join(root, 'src', 'extension', 'preset-control');
 const outDir = path.join(root, 'dist', extensionName);
 
 class CopyManifestPlugin {
   apply(compiler) {
     compiler.hooks.afterEmit.tap('CopyManifestPlugin', () => {
       fs.mkdirSync(outDir, { recursive: true });
-      const sourcePath = path.join(root, 'src', extensionName, 'manifest.json');
+      const sourcePath = path.join(extensionSourceDir, 'manifest.json');
       const source = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
 
       fs.writeFileSync(path.join(outDir, 'manifest.json'), `${JSON.stringify(source, null, 2)}\n`);
@@ -30,7 +31,7 @@ export default {
     outputModule: true,
   },
   devtool: false,
-  entry: path.join(root, 'src', extensionName, 'index.ts'),
+  entry: path.join(extensionSourceDir, 'index.ts'),
   target: 'browserslist',
   output: {
     filename: 'index.js',

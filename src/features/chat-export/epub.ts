@@ -110,6 +110,10 @@ function contentOpf(chapters: Chapter[], meta: BookMeta, id: string): string {
   const lang = escapeXml(meta.language || 'zh');
   const modified = `${new Date().toISOString().split('.')[0]}Z`;
   const creator = meta.author ? `\n    <dc:creator>${escapeXml(meta.author)}</dc:creator>` : '';
+  const coverMeta = meta.cover ? '\n    <meta name="cover" content="cover-image"/>' : '';
+  const coverItem = meta.cover
+    ? `\n    <item id="cover-image" href="${escapeXml(meta.cover.href)}" media-type="${escapeXml(meta.cover.mediaType)}" properties="cover-image"/>`
+    : '';
   const items = chapters
     .map(ch => `    <item id="ch${ch.index}" href="${chapterHref(ch)}" media-type="application/xhtml+xml"/>`)
     .join('\n');
@@ -120,12 +124,12 @@ function contentOpf(chapters: Chapter[], meta: BookMeta, id: string): string {
     <dc:identifier id="bookid">urn:uuid:${id}</dc:identifier>
     <dc:title>${escapeXml(meta.title)}</dc:title>
     <dc:language>${lang}</dc:language>${creator}
-    <meta property="dcterms:modified">${modified}</meta>
+    <meta property="dcterms:modified">${modified}</meta>${coverMeta}
   </metadata>
   <manifest>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
-    <item id="css" href="style.css" media-type="text/css"/>
+    <item id="css" href="style.css" media-type="text/css"/>${coverItem}
 ${items}
   </manifest>
   <spine toc="ncx">
@@ -164,6 +168,7 @@ export function buildEpub(chapters: Chapter[], meta: BookMeta): Uint8Array {
     text('OEBPS/nav.xhtml', navXhtml(chapters, meta, chapterHref)),
     text('OEBPS/toc.ncx', tocNcx(chapters, meta, id)),
     text('OEBPS/style.css', BOOK_CSS),
+    ...(meta.cover ? [{ name: `OEBPS/${meta.cover.href}`, data: meta.cover.data }] : []),
     ...chapters.map(ch => text(`OEBPS/${chapterHref(ch)}`, chapterXhtml(ch, meta))),
   ];
   return zipStore(entries);

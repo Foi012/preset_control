@@ -11,6 +11,11 @@ export interface BookMeta {
   author: string;
   /** BCP-47-ish language code, e.g. `zh`, `en`. */
   language: string;
+  cover?: {
+    data: Uint8Array;
+    mediaType: string;
+    href: string;
+  } | null;
 }
 
 export function escapeXml(s: string): string {

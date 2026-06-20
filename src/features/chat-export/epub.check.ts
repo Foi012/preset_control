@@ -1,7 +1,7 @@
 /**
  * Lightweight check for EPUB packaging. Asserts the ZIP structure + writes a real
  * .epub to a temp path so a follow-up `unzip` can validate it end-to-end.
- * Run: npx ts-node --transpile-only -P tsconfig.check.json src/chat-export/epub.check.ts
+ * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/epub.check.ts
  */
 import { crc32, zipStore, buildEpub, chapterHref } from './epub';
 import type { Chapter } from './chapters';
@@ -41,6 +41,15 @@ check('contains toc.ncx', blob.includes('OEBPS/toc.ncx'), true);
 check('contains nav.xhtml', blob.includes('OEBPS/nav.xhtml'), true);
 check('contains chapter file', blob.includes(`OEBPS/${chapterHref(chapters[0])}`), true);
 check('ends with EOCD signature', [epub[epub.length - 22], epub[epub.length - 21]], [0x50, 0x4b]);
+
+const coverEpub = buildEpub(chapters, {
+  ...meta,
+  cover: { href: 'cover.jpg', mediaType: 'image/jpeg', data: new Uint8Array([1, 2, 3]) },
+});
+const coverBlob = dec.decode(coverEpub);
+check('cover file is included', coverBlob.includes('OEBPS/cover.jpg'), true);
+check('cover manifest item is included', coverBlob.includes('id="cover-image" href="cover.jpg" media-type="image/jpeg"'), true);
+check('cover metadata is included', coverBlob.includes('<meta name="cover" content="cover-image"/>'), true);
 
 // Write a real file for `unzip` validation.
 const fs = require('fs');

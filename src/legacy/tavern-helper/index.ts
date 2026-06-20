@@ -14,8 +14,8 @@
 import { createPinia } from 'pinia';
 import { createApp, watch } from 'vue';
 import { teleportStyle } from '@util/script';
-import App from './App.vue';
-import { flushAutosave, useConsoleStore, useUiStore, type ThemePref } from './store';
+import App from '@/features/preset-console/App.vue';
+import { flushAutosave, useConsoleStore, useUiStore, type ThemePref } from '@/features/preset-console/store';
 import { emitCssVars, themeByName } from '@/ui/tokens';
 
 const POSITION_KEY = 'presetEasyTogglePosition';
@@ -27,6 +27,8 @@ const CLOSED_SIZE = 36;
 const OPEN_WIDTH = 385;
 const OPEN_MAX_HEIGHT = 660;
 const OPEN_HEIGHT_RATIO = 0.78;
+const HOME_WIDTH = 224;
+const HOME_HEIGHT = 100;
 const EDGE_PADDING = 4;
 /** Below this host width the panel goes near-full-width; side navs become drawers. */
 const COMPACT_MAX_WIDTH = 480;
@@ -55,8 +57,14 @@ function viewport() {
   return { width: win.innerWidth, height: win.innerHeight };
 }
 
-function openSize() {
+function openSize(home = false) {
   const { width, height } = viewport();
+  if (home) {
+    return {
+      width: Math.min(HOME_WIDTH, width - EDGE_PADDING * 2),
+      height: Math.min(HOME_HEIGHT, height - EDGE_PADDING * 2),
+    };
+  }
   // Never exceed the viewport, or the fixed iframe spills past the edge and forces
   // the whole host page to scroll horizontally (the mobile-overflow bug). On phones
   // this makes the panel near-full-width; on desktop it stays at OPEN_WIDTH.
@@ -188,6 +196,13 @@ async function init(): Promise<void> {
   const consoleStore = useConsoleStore(pinia);
   void consoleStore.load();
 
+  function onOutsidePointerDown(event: PointerEvent): void {
+    if (!ui.open) return;
+    if ($frame[0].contains(event.target as Node)) return;
+    ui.open = false;
+  }
+  (window.parent ?? window).document.addEventListener('pointerdown', onOutsidePointerDown);
+
   const framePoint = (detail: DragDetail): Point => {
     const rect = $frame[0].getBoundingClientRect();
     return { x: rect.left + detail.clientX, y: rect.top + detail.clientY };
@@ -199,7 +214,7 @@ async function init(): Promise<void> {
    *  trigger position so it stays on-screen. */
   function frameBox(open: boolean): Box {
     if (open) {
-      const size = openSize();
+      const size = openSize(ui.activeTool === 'home');
       const point = clampPoint(triggerPosition, size.width, size.height);
       return { x: point.x, y: point.y, width: size.width, height: size.height };
     }
@@ -254,8 +269,8 @@ async function init(): Promise<void> {
   // First run (mount) snaps the box instantly; later open/close changes animate.
   let layoutPrimed = false;
   const stopResize = watch(
-    () => ui.open,
-    open => {
+    () => [ui.open, ui.activeTool] as const,
+    ([open]) => {
       if (!layoutPrimed) {
         layoutPrimed = true;
         applyFrameLayout(open);
@@ -315,6 +330,7 @@ async function init(): Promise<void> {
   $(window).on('pagehide', () => {
     stopResize();
     stopTheme();
+    (window.parent ?? window).document.removeEventListener('pointerdown', onOutsidePointerDown);
     window.removeEventListener('pet-trigger-drag-start', onDragStart);
     window.removeEventListener('pet-trigger-drag-move', onDragMove);
     window.removeEventListener('pet-trigger-drag-end', onDragEnd);

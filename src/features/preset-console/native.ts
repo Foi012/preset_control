@@ -12,6 +12,8 @@ const CLOSED_SIZE = 36;
 const OPEN_WIDTH = 385;
 const OPEN_MAX_HEIGHT = 660;
 const OPEN_HEIGHT_RATIO = 0.78;
+const HOME_WIDTH = 224;
+const HOME_HEIGHT = 100;
 const EDGE_PADDING = 4;
 const COMPACT_MAX_WIDTH = 480;
 
@@ -33,8 +35,14 @@ function viewport() {
   return { width: window.innerWidth, height: window.innerHeight };
 }
 
-function openSize() {
+function openSize(home = false) {
   const { width, height } = viewport();
+  if (home) {
+    return {
+      width: Math.min(HOME_WIDTH, width - EDGE_PADDING * 2),
+      height: Math.min(HOME_HEIGHT, height - EDGE_PADDING * 2),
+    };
+  }
   return {
     width: Math.min(OPEN_WIDTH, width - EDGE_PADDING * 2),
     height: Math.min(height * OPEN_HEIGHT_RATIO, OPEN_MAX_HEIGHT),
@@ -164,7 +172,7 @@ function init(): void {
   type Box = { x: number; y: number; width: number; height: number };
   function frameBox(open: boolean): Box {
     if (open) {
-      const size = openSize();
+      const size = openSize(ui.activeTool === 'home');
       const point = clampPoint(triggerPosition, size.width, size.height);
       return { x: point.x, y: point.y, width: size.width, height: size.height };
     }
@@ -208,6 +216,13 @@ function init(): void {
   const styleObserver = copyComponentStyles(shadow);
   void store.load();
 
+  function onOutsidePointerDown(event: PointerEvent): void {
+    if (!ui.open) return;
+    if (host.contains(event.target as Node)) return;
+    ui.open = false;
+  }
+  document.addEventListener('pointerdown', onOutsidePointerDown);
+
   const stopTheme = watch(
     () => ui.theme,
     theme => {
@@ -218,8 +233,8 @@ function init(): void {
 
   let layoutPrimed = false;
   const stopLayout = watch(
-    () => ui.open,
-    open => {
+    () => [ui.open, ui.activeTool] as const,
+    ([open]) => {
       if (!layoutPrimed) {
         layoutPrimed = true;
         applyLayout(open);
@@ -279,6 +294,7 @@ function init(): void {
     stopTheme();
     stopLayout();
     styleObserver.disconnect();
+    document.removeEventListener('pointerdown', onOutsidePointerDown);
     window.removeEventListener('pet-trigger-drag-start', onDragStart);
     window.removeEventListener('pet-trigger-drag-move', onDragMove);
     window.removeEventListener('pet-trigger-drag-end', onDragEnd);
@@ -296,4 +312,3 @@ if (document.readyState === 'loading') {
 } else {
   window.setTimeout(init, 0);
 }
-

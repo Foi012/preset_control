@@ -1,6 +1,6 @@
 /**
  * Lightweight check for the parser against the trimmed fixture.
- * Run: npx ts-node --transpile-only -P tsconfig.novelizer.json src/preset-easy-toggle/parser.check.ts
+ * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/preset-console/parser.check.ts
  * (no test runner is configured in this repo; this is a plain assertion script)
  */
 import { parsePreset } from './parser';

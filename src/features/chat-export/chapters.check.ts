@@ -1,6 +1,6 @@
 /**
  * Lightweight check for chapter splitting.
- * Run: npx ts-node --transpile-only -P tsconfig.check.json src/chat-export/chapters.check.ts
+ * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/chapters.check.ts
  */
 import { buildChapters } from './chapters';
 import type { NormMessage, Role } from './normalize';
@@ -27,6 +27,14 @@ check('per-message bodies', perMsg.map(c => c.body), ['u1', 'a1', 'u2', 'a2']);
 const perAsst = buildChapters(plain, {}, { kind: 'per-assistant' });
 check('per-assistant → 3 chapters', perAsst.length, 3);
 check('per-assistant groups user into following chapter', perAsst.map(c => c.body), ['u1', 'a1\n\nu2', 'a2']);
+
+const divided = buildChapters(plain, {}, { kind: 'every', n: 4 }, { roleDivider: '---' });
+check('role divider appears only on role changes', divided[0].body, 'u1\n\n---\n\na1\n\n---\n\nu2\n\n---\n\na2');
+
+idx = 0;
+const runs = [m('user', 'u1'), m('user', 'u2'), m('assistant', 'a1'), m('assistant', 'a2')];
+const dividedRuns = buildChapters(runs, {}, { kind: 'every', n: 4 }, { roleDivider: '---' });
+check('role divider skips consecutive same-role messages', dividedRuns[0].body, 'u1\n\nu2\n\n---\n\na1\n\na2');
 
 // every N: fixed-size groups.
 const every2 = buildChapters(plain, {}, { kind: 'every', n: 2 });
