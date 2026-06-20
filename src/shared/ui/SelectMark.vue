@@ -1,0 +1,84 @@
+<script setup lang="ts">
+/**
+ * The single radio/checkbox visual for the whole toolbox — the preset console's
+ * per-entry/per-group marks and the chat-export tag-scanner select-all all read the
+ * same. `checkbox` shows a tick when on and a dash when partial (indeterminate);
+ * `radio` is on/off only. Purely presentational — the parent owns the click + state.
+ */
+import PetIcon from '@/ui/PetIcon.vue';
+
+withDefaults(
+  defineProps<{
+    type: 'radio' | 'checkbox';
+    state: 'on' | 'off' | 'partial';
+    size?: 'md' | 'sm';
+  }>(),
+  { size: 'md' },
+);
+</script>
+
+<template>
+  <span class="pet-mark" :class="[`pet-mark--${type}`, `pet-mark--${state}`, `pet-mark--${size}`]">
+    <PetIcon v-if="type === 'checkbox' && state === 'on'" name="check" />
+  </span>
+</template>
+
+<style scoped>
+.pet-mark {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  color: var(--pet-color-accent-text);
+  background: transparent;
+  border: 2px solid var(--pet-color-mark-border);
+  transition:
+    background var(--pet-motion-fast) var(--pet-motion-ease),
+    border-color var(--pet-motion-fast) var(--pet-motion-ease),
+    box-shadow var(--pet-motion-fast) var(--pet-motion-ease);
+}
+.pet-mark--sm {
+  width: 14px;
+  height: 14px;
+  border-width: 1.5px;
+}
+.pet-mark--radio {
+  border-radius: var(--pet-radius-pill);
+}
+.pet-mark--checkbox {
+  border-radius: var(--pet-radius-sm);
+}
+.pet-mark--radio.pet-mark--on {
+  border-color: var(--pet-color-accent);
+  box-shadow: inset 0 0 0 4px var(--pet-color-accent);
+}
+.pet-mark--checkbox.pet-mark--on {
+  background: var(--pet-color-accent);
+  border-color: var(--pet-color-accent);
+}
+.pet-mark--checkbox.pet-mark--partial {
+  border-color: var(--pet-color-accent);
+}
+.pet-mark--checkbox.pet-mark--partial::after {
+  content: '';
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--pet-color-accent);
+}
+.pet-mark--sm.pet-mark--checkbox.pet-mark--partial::after {
+  width: 6px;
+}
+.pet-mark :deep(.pet-icon) {
+  width: 12px;
+  height: 12px;
+  stroke-width: 3;
+}
+.pet-mark--sm :deep(.pet-icon) {
+  width: 10px;
+  height: 10px;
+}
+</style>

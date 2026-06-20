@@ -5,11 +5,17 @@
   "scripts": {
     "build": "webpack --mode production",
     "build:dev": "webpack --mode development",
-    "check:parser": "ts-node --transpile-only -P tsconfig.check.json src/preset-easy-toggle/parser.check.ts",
-    "check:config": "ts-node --transpile-only -P tsconfig.check.json src/preset-easy-toggle/config.check.ts",
-    "check:preset-io": "ts-node --transpile-only -P tsconfig.check.json src/preset-easy-toggle/preset-io.check.ts",
-    "check:preset-io-native": "ts-node --transpile-only -P tsconfig.check.json src/preset-easy-toggle/preset-io-native.check.ts",
-    "check:store": "ts-node --transpile-only -P tsconfig.check.json src/preset-easy-toggle/store.check.ts"
+    "check:parser": "ts-node --transpile-only -P tsconfig.check.json src/features/preset-console/parser.check.ts",
+    "check:config": "ts-node --transpile-only -P tsconfig.check.json src/features/preset-console/config.check.ts",
+    "check:preset-io": "ts-node --transpile-only -P tsconfig.check.json src/features/preset-console/preset-io.check.ts",
+    "check:preset-io-native": "ts-node --transpile-only -P tsconfig.check.json src/features/preset-console/preset-io-native.check.ts",
+    "check:store": "ts-node --transpile-only -P tsconfig.check.json src/features/preset-console/store.check.ts",
+    "check:chat-normalize": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/normalize.check.ts",
+    "check:chat-extract": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/extract.check.ts",
+    "check:chat-scan": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/scan.check.ts",
+    "check:chat-chapters": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/chapters.check.ts",
+    "check:chat-render": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/render.check.ts",
+    "check:chat-epub": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/epub.check.ts"
   },
   "browserslist": [
     "defaults and partially supports es6-module"

@@ -5,18 +5,18 @@ import { VueLoaderPlugin } from 'vue-loader';
 import webpack from 'webpack';
 
 const root = import.meta.dirname;
+const extensionSourceDir = path.join(root, 'src', 'extension', 'preset-control');
 
 export default {
   experiments: {
     outputModule: true,
   },
   devtool: false,
-  // The whole app (Vue UI + native mount) lives under src/preset-easy-toggle.
-  entry: path.join(root, 'src', 'preset-easy-toggle', 'native.ts'),
+  entry: path.join(extensionSourceDir, 'index.ts'),
   target: 'browserslist',
   output: {
     // SillyTavern clones this repo as the extension folder and loads the file
-    // named by manifest.json ("index.js") from the repo root — so we emit there.
+    // named by manifest.json ("index.js") from the repo root.
     filename: 'index.js',
     path: root,
     publicPath: '',

@@ -1,70 +1,94 @@
 # 预设控制台 · Preset Control
 
-一款原生的 SillyTavern 扩展，将聊天补全预设中扁平的提示词列表，变成一个清爽的浮动控制台，用于切换和整理条目——为 ST 内置的提示词管理器提供更友好的交互层。
+Native SillyTavern extension for two workflows:
 
-A native SillyTavern extension that turns a chat-completion preset's flat prompt
-list into a clean, floating console for toggling and arranging entries — a
-friendlier layer over ST's built-in prompt manager.
+- **Preset console**: turn a flat chat-completion preset into a compact floating console for toggling, grouping, editing, importing, and exporting entries without changing prompt order.
+- **Chat export**: turn an active chat or `.jsonl` chat log into cleaned TXT / EPUB output.
 
 ## 功能
 
-- 可拖拽的浮动控制台 — 一个可以随意放置的小触发按钮；点击后展开面板，提供两种模式：使用（In-use） 进行操作，编辑（Edit） 进行配置。无需翻找设置抽屉。
-- 规则感知的开关 — 每个条目会自动渲染出正确的控件：单选（radio）、多选（checkbox）、📍 始终开启（锁定）和 ✍️ 文本输入（文本框）。修改会实时应用到 SillyTavern 并保存到预设中。
-- 虚拟分组 — 创建和重命名分组，在分组间移动条目，最多支持两级嵌套。你的预设本身不会被重新排序；分组只是一个叠加层，存储在配置中。
-- 模式与快照 — 定义命名的 模式（Modes），圈定并排列一组分组子集；将开关组合保存为 快照（Snapshots），一键即可应用。
-- 必开分组与整理 — 将分组标记为 必开（组内至少保留一项开启），它会自行强制执行；可隐藏无关条目；将重要分组置顶。
-- 随预设携带 — 所有配置都保存在预设内部，因此能经受 ST 编辑和预设切换而保留。支持导出/导入以备份或迁移至其他预设。
-- 主题与移动端 — 浅色/深色切换开关，以及适配手机的响应式布局。
-### Features
-- **Floating, draggable console** — a small trigger you can drop anywhere; it opens
-  into a panel with two modes: **使用 (In-use)** to operate and **编辑 (Edit)** to
-  configure. No settings drawer to dig through.
-- **Rule-aware toggles** — each entry renders the right control automatically:
-  single-select (radio), multi-select (checkbox), 📍 always-on (locked), and
-  ✍️ input (text box). Changes apply to SillyTavern live and save to the preset.
-- **Virtual grouping** — create and rename groups, move entries between them, and
-  nest up to two levels. Your preset is never reordered; the grouping is an overlay
-  stored in config.
-- **Modes & Snapshots** — define named **Modes (模式)** that scope and arrange a
-  subset of groups, and save ON/OFF combinations as **Snapshots (快照)** you apply
-  in one click.
-- **Required groups & cleanup** — mark a group 必开 (must keep one entry on) and it
-  self-enforces; hide noise; pin important groups to the top.
-- **Travels with the preset** — all config lives inside the preset, so it survives
-  ST edits and preset switches. Export / import to back it up or move it to another
-  preset.
-- **Theme & mobile** — light/dark toggle and a responsive layout for phones.
+- 可拖拽的浮动工具箱：打开预设控制台或聊天导出工具。
+- 规则感知的预设开关：单选、多选、始终开启、文本输入会自动使用合适控件。
+- 虚拟分组：`[NN-NAME]` 空提示词会作为自动分组建议，`NN` 控制建议顺序；编辑模式中的移动不会重排真实 prompt list。
+- 模式与快照：保存一组开关状态并一键应用。
+- 随预设携带：配置保存在 `preset.extensions.presetEasyToggle`，应跟随同一个 ST account / preset data，而不是只存在浏览器本地。
+- 聊天导出：扫描标签、包含 / 排除内容、限制楼层范围、角色分隔线、封面压缩、章节切分、TXT / EPUB 导出。
 
-## 使用场景
+## Install
 
-- 你维护一个大型预设，内含大量模块化条目（视角、人设、风格、情节块、模型专属的 COT 尾句），而 ST 的扁平提示词管理器操作起来十分痛苦。一次性分组后，像控制面板一样轻松切换。
-- 你频繁在一个预设的不同配置间切换——Claude / GPT / Gemini 配置文件，或 写作 / 总结 / 大纲——希望它们以快照形式一键切换，不必每次都重新勾选十几个选项。
-- 你需要可靠的状态保持：每次修改都会立即写入当前预设并持久化到磁盘，离开再返回后选择依然保留。
-### Use cases
-- You keep **one large preset** with many modular entries (POV, persona, styles,
-  plot blocks, model-specific COT tails) and ST's flat prompt manager is painful to
-  operate. Group them once, then flip them like a control panel.
-- You switch between **setups** constantly within one preset — claude / gpt / gemini profiles, or
-  写作 / 总结 / 大纲 — and want them one tap away as Snapshots instead of
-  re-checking a dozen boxes every time.
-- You want toggles that **stick**: every change writes to the live preset and to
-  disk, so your selections survive leaving and returning.
-
-## 安装
-
-1. 在 SillyTavern 中，打开 扩展（Extensions） 菜单，点击 安装扩展（Install Extension）。
-2. 粘贴仓库地址：
-   ```
-   https://github.com/Foi012/preset_control
-   ```
-3. 点击 安装，然后 刷新 页面。
-4. 选择一个包含 ⚙️CUSTOMIZATION_START / _END 区域的聊天补全预设——控制台触发按钮会随即出现在屏幕上。
-### Installation
-1. In SillyTavern, open the **Extensions** menu and click **Install Extension**.
+1. In SillyTavern, open **Extensions** and click **Install Extension**.
 2. Paste the repository URL:
-   ```
-   https://github.com/Foi012/preset_control
-   ```
-3. Click **Install**, then **refresh** the page.
-4. Select a chat-completion preset that contains a `⚙️CUSTOMIZATION_START / _END`
-   region — the console trigger then appears on screen.
+
+```text
+https://github.com/Foi012/preset_control
+```
+
+3. Click **Install**, then refresh SillyTavern.
+
+SillyTavern clones this repo into:
+
+```text
+data/<user-handle>/extensions/preset_control/
+```
+
+The root `manifest.json` loads the built root bundle:
+
+```text
+index.js
+```
+
+## Build
+
+```sh
+pnpm install
+pnpm build
+```
+
+## Preset Console Notes
+
+- Empty prompt headers named `[NN-NAME]` are parsed as automatic group suggestions.
+- Grouping is a virtual overlay. The preset prompt order is not rewritten, because prompt order can affect generation.
+- Header export downloads the console config JSON: groups, modes, snapshots, entry metadata, and UI config.
+- Header import accepts either that raw config JSON or a full SillyTavern preset export containing `[⚙️CONSOLE-CONFIG]`.
+- Use config export/import when moving between accounts, devices, or old Tavern Helper-managed presets.
+
+## Chat Export Notes
+
+1. **来源**: read the active chat or import `.jsonl`; successful reads advance to rules automatically.
+2. **规则**: scan paired tags, include / exclude content, include user or hidden floors, limit floor range, and optionally insert role dividers.
+3. **预览**: compare original messages with cleaned output.
+4. **导出**: set book metadata, optional compressed cover image, chapter splitting, and export TXT / EPUB.
+
+Export details:
+
+- The tag scanner routes each discovered tag to one destination: 不处理, 排除, or 包含.
+- Title and body rules can use a tag name or regex.
+- Floor range is applied after the include-user / include-hidden filters.
+- Consecutive messages from the same role are kept together; the optional role divider is inserted only when the role changes.
+- Cover uploads are compressed in-browser before being embedded into EPUB.
+
+## Checks
+
+```sh
+pnpm check:parser
+pnpm check:config
+pnpm check:preset-io
+pnpm check:preset-io-native
+pnpm check:store
+pnpm check:chat-normalize
+pnpm check:chat-extract
+pnpm check:chat-scan
+pnpm check:chat-chapters
+pnpm check:chat-render
+pnpm check:chat-epub
+pnpm build
+```
+
+## Source Layout
+
+- `src/extension/preset-control/` is the shipped native SillyTavern extension entry.
+- `src/features/preset-console/` contains the preset console feature: parser, config, store, native ST adapter, and console UI.
+- `src/features/chat-export/` contains the chat export workflow and parser/render/export checks.
+- `src/shared/ui/` is the shared design system used by both tools. Imports use the short `@/ui/*` alias.
+- `src/legacy/tavern-helper/` preserves the older Tavern Helper iframe/script runtime. It is excluded from the native TS project and is not the webpack entry.
+- `src/env.d.ts` holds app-wide SillyTavern globals.
