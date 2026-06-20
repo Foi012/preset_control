@@ -4,6 +4,7 @@ export type IconName =
   | 'alert'
   | 'arrow-left'
   | 'bookmark-plus'
+  | 'bot'
   | 'check'
   | 'chevron-down'
   | 'chevron-left'
@@ -30,7 +31,8 @@ export type IconName =
   | 'trash'
   | 'type'
   | 'unfold'
-  | 'upload';
+  | 'upload'
+  | 'user';
 </script>
 
 <script setup lang="ts">
@@ -48,6 +50,11 @@ defineProps<{ name: IconName }>();
     <template v-else-if="name === 'bookmark-plus'">
       <path d="M6 3h12v18l-6-4-6 4V3Z" />
       <path d="M12 7v5M9.5 9.5h5" />
+    </template>
+    <template v-else-if="name === 'bot'">
+      <path d="M12 7V4M12 4a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" />
+      <path d="M6 7h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
+      <path d="M9 12v2M15 12v2M2 12v2M22 12v2" />
     </template>
     <path v-else-if="name === 'check'" d="m5 12 5 5L20 7" />
     <path v-else-if="name === 'chevron-down'" d="m6 9 6 6 6-6" />
@@ -98,6 +105,10 @@ defineProps<{ name: IconName }>();
     <path v-else-if="name === 'type'" d="M4 7V4h16v3M12 4v16M8 20h8" />
     <path v-else-if="name === 'unfold'" d="M7 5l5 5 5-5M7 19l5-5 5 5" />
     <path v-else-if="name === 'upload'" d="M12 15V3M7 8l5-5 5 5M5 21h14" />
+    <template v-else-if="name === 'user'">
+      <path d="M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
+      <path d="M5.5 21v-1a6.5 6.5 0 0 1 13 0v1" />
+    </template>
   </svg>
 </template>
 

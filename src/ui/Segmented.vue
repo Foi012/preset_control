@@ -43,7 +43,7 @@ defineEmits<{ 'update:modelValue': [value: string] }>();
   gap: 2px;
   background: var(--pet-color-surface);
   border: 1px solid var(--pet-color-border);
-  border-radius: var(--pet-radius-pill);
+  border-radius: var(--pet-radius-md);
 }
 .pet-seg--disabled {
   opacity: 0.45;
@@ -55,7 +55,7 @@ defineEmits<{ 'update:modelValue': [value: string] }>();
   color: var(--pet-color-text-muted);
   background: transparent;
   border: none;
-  border-radius: var(--pet-radius-pill);
+  border-radius: var(--pet-radius-sm);
   cursor: pointer;
   white-space: nowrap;
   word-break: keep-all;

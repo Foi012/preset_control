@@ -1,10 +1,9 @@
 <script setup lang="ts">
 /**
- * The single radio/checkbox visual for the in-use page — used by both the per-entry
- * tile marks (EntryRow) and the per-group master toggle (SectionCard) so every
- * selection control reads the same. `checkbox` shows a tick when on and a dash when
- * partial (indeterminate); `radio` is on/off only. Purely presentational — the parent
- * owns the click + state.
+ * The single radio/checkbox visual for the whole toolbox — the preset console's
+ * per-entry/per-group marks and the chat-export tag-scanner select-all all read the
+ * same. `checkbox` shows a tick when on and a dash when partial (indeterminate);
+ * `radio` is on/off only. Purely presentational — the parent owns the click + state.
  */
 import PetIcon from '@/ui/PetIcon.vue';
 

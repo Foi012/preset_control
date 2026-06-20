@@ -31,8 +31,10 @@ export interface ExtractConfig {
   strip?: { reasoning?: boolean; ooc?: boolean };
   /** Custom exclude rules — each a tag name or `/regex/flags`. Removed from all messages. */
   exclude?: string[];
-  /** Include / 正文 rules — tag or regex. Define the body for assistant messages. */
+  /** 正文 rules — tag or regex. Their matches become the chapter body (assistant turns). */
   include?: string[];
+  /** 标题 rules — tag or regex. Their matches become the chapter title field. */
+  title?: string[];
 }
 
 export interface Extracted {
@@ -123,13 +125,40 @@ function eachMatch(re: RegExp, text: string, fn: (m: RegExpExecArray) => void): 
 export function extractMessage(content: string, role: Role, config: ExtractConfig): Extracted {
   const text = stripExcludes(content, config).trim();
   const includes = (config.include ?? []).filter(r => r.trim());
-  if (role !== 'assistant' || includes.length === 0) {
+  const titles = (config.title ?? []).filter(r => r.trim());
+  if (role !== 'assistant' || (includes.length === 0 && titles.length === 0)) {
     return { body: text, fields: {}, matched: true };
   }
 
   const bodyParts: string[] = [];
   const fields: Record<string, string> = {};
   let anyMatch = false;
+
+  // 标题 rules — their first match is pinned to the `title` field (becomes the chapter
+  // title). Routed by the input box the user chose, not by tag/group name.
+  for (const rule of titles) {
+    if ('title' in fields) break;
+    const tag = asTagName(rule);
+    if (tag) {
+      const t = escapeRe(tag);
+      const re = new RegExp(`<${t}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${t}\\s*>`, 'gu');
+      eachMatch(re, text, m => {
+        if ('title' in fields) return;
+        anyMatch = true;
+        fields.title = m[1].trim();
+      });
+    } else {
+      const { re } = parseRegex(rule, 'g');
+      if (!re) continue;
+      eachMatch(re, text, m => {
+        if ('title' in fields) return;
+        anyMatch = true;
+        const groups = m.groups ?? {};
+        const named = Object.values(groups).find(v => v != null);
+        fields.title = (named ?? m[1] ?? m[0]).trim();
+      });
+    }
+  }
 
   for (const rule of includes) {
     const tag = asTagName(rule);
