@@ -2,7 +2,7 @@
  * Lightweight check for the typography engine + inline decoration.
  * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/style.check.ts
  */
-import { resolveStyleRules, buildStyleCss, sanitizeClassName, emptyStyleConfig, type StyleConfig } from './style';
+import { resolveStyleRules, buildStyleCss, sanitizeClassName, styleRenderOptions, emptyStyleConfig, type StyleConfig } from './style';
 import { bodyToParagraphs, decorateInline } from './render';
 
 let failures = 0;
@@ -45,13 +45,28 @@ check(
   '他说<span class="st-dialogue">&quot;你好&quot;</span>。',
 );
 check('plain text outside a match is escaped', decorateInline('<x> "hi"', dRules), '&lt;x&gt; <span class="st-dialogue">&quot;hi&quot;</span>');
-const eRules = resolveStyleRules({ presets: ['emphasis'], rules: [], css: '' });
-check('emphasis wraps group 1 and drops markers', decorateInline('看 *重点* 哦', eRules), '看 <span class="st-emphasis">重点</span> 哦');
+const mdRules = resolveStyleRules({ presets: ['markdown'], rules: [], css: '' });
+check('markdown italic wraps group 1 and drops markers', decorateInline('看 *重点* 哦', mdRules), '看 <span class="st-i">重点</span> 哦');
+check('markdown bold', decorateInline('**很重要**', mdRules), '<span class="st-b">很重要</span>');
+check('markdown bold-italic before bold/italic', decorateInline('***超***', mdRules), '<span class="st-bi">超</span>');
+check('markdown strikethrough', decorateInline('~~划掉~~', mdRules), '<span class="st-del">划掉</span>');
+check('markdown underscore italic', decorateInline('a _it_ b', mdRules), 'a <span class="st-i">it</span> b');
 check(
-  'two rules do not re-match inside an existing span',
-  decorateInline('"*x*"', resolveStyleRules({ presets: ['dialogue', 'emphasis'], rules: [], css: '' })),
+  'dialogue + markdown do not re-match inside an existing span',
+  decorateInline('"*x*"', resolveStyleRules({ presets: ['dialogue', 'markdown'], rules: [], css: '' })),
   '<span class="st-dialogue">&quot;*x*&quot;</span>',
 );
+
+// --- blockquote (block-level) ---------------------------------------------
+check('blockquote off → no transform', bodyToParagraphs('> 引用', mdRules, {}), '<p class="cex-lead">&gt; 引用</p>');
+check('blockquote on → <blockquote>', bodyToParagraphs('> 引用', mdRules, styleRenderOptions({ presets: ['markdown'], rules: [], css: '' })), '<blockquote><p>引用</p></blockquote>');
+check(
+  'nested >> blockquote',
+  bodyToParagraphs('> 外\n>> 内', mdRules, styleRenderOptions({ presets: ['markdown'], rules: [], css: '' })),
+  '<blockquote><p>外</p><blockquote><p>内</p></blockquote></blockquote>',
+);
+check('styleRenderOptions.blockquote true with markdown', styleRenderOptions({ presets: ['markdown'], rules: [], css: '' }).blockquote, true);
+check('styleRenderOptions.blockquote false otherwise', styleRenderOptions(dialogueOnly).blockquote, false);
 
 // --- bodyToParagraphs threading rules --------------------------------------
 check(

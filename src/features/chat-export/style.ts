@@ -35,13 +35,15 @@ export interface StyleConfig {
 
 export const emptyStyleConfig = (): StyleConfig => ({ presets: [], rules: [], css: '' });
 
-/** A preset = a labelled toggle carrying an optional inline rule + the CSS it needs. */
+/** A preset = a labelled toggle carrying inline rules, an optional block transform, and CSS. */
 export interface StylePreset {
   id: string;
   label: string;
   hint: string;
-  /** Inline span rule. Omitted for CSS-only presets (e.g. the drop cap). */
-  rule?: StyleRule;
+  /** Inline span rules, applied in array order (e.g. *** before ** before *). CSS-only presets omit it. */
+  rules?: StyleRule[];
+  /** Enable block-level `>` / `>>` blockquote parsing in the renderer. */
+  blockquote?: boolean;
   css: string;
 }
 
@@ -49,6 +51,11 @@ export interface StylePreset {
 export interface ResolvedRule {
   re: RegExp;
   className: string;
+}
+
+/** What the renderer needs beyond inline rules — block-level transforms toggled by presets. */
+export interface StyleRenderOptions {
+  blockquote: boolean;
 }
 
 /**
@@ -60,15 +67,30 @@ export const STYLE_PRESETS: StylePreset[] = [
     id: 'dialogue',
     label: '加粗对话',
     hint: '把成对引号内的台词加粗（支持 " "、「」、“”、«»）。',
-    rule: { pattern: '"[^"\\n]*"|“[^”\\n]*”|「[^」\\n]*」|『[^』\\n]*』|«[^»\\n]*»', className: 'st-dialogue' },
+    rules: [{ pattern: '"[^"\\n]*"|“[^”\\n]*”|「[^」\\n]*」|『[^』\\n]*』|«[^»\\n]*»', className: 'st-dialogue' }],
     css: '.st-dialogue { font-weight: bold; }',
   },
   {
-    id: 'emphasis',
-    label: '星号转倾斜',
-    hint: '把 *…* 包裹的文字转为斜体，并去掉星号。',
-    rule: { pattern: '\\*([^*\\n]+)\\*', className: 'st-emphasis' },
-    css: '.st-emphasis { font-style: italic; }',
+    id: 'markdown',
+    label: 'Markdown 标记',
+    hint: '渲染 **粗体**、*斜体* / _斜体_、***粗斜体***、~~删除线~~ 与 > 引用（>> 嵌套），并去掉标记符号。',
+    // Order matters: *** before ** before *, so the tokenizer can't nest wrongly.
+    rules: [
+      { pattern: '\\*\\*\\*([^*\\n]+)\\*\\*\\*', className: 'st-bi' },
+      { pattern: '\\*\\*([^*\\n]+)\\*\\*', className: 'st-b' },
+      { pattern: '~~([^~\\n]+)~~', className: 'st-del' },
+      { pattern: '\\*([^*\\n]+)\\*', className: 'st-i' },
+      { pattern: '(?<![\\w*])_([^_\\n]+)_(?![\\w*])', className: 'st-i' },
+    ],
+    blockquote: true,
+    css: [
+      '.st-b { font-weight: bold; }',
+      '.st-i { font-style: italic; }',
+      '.st-bi { font-weight: bold; font-style: italic; }',
+      '.st-del { text-decoration: line-through; }',
+      'blockquote { margin: 1em 0; padding-left: 0.9em; border-left: 3px solid; opacity: 0.85; font-style: italic; }',
+      'blockquote blockquote { margin: 0.5em 0; }',
+    ].join('\n'),
   },
   {
     id: 'dropcap',
@@ -77,8 +99,6 @@ export const STYLE_PRESETS: StylePreset[] = [
     css: '.chapter p.cex-lead { text-indent: 0; }\n.chapter p.cex-lead::first-letter { float: left; font-size: 3em; line-height: 0.8; margin: 0.02em 0.12em 0 0; font-weight: 600; }',
   },
 ];
-
-const presetById = (id: string): StylePreset | undefined => STYLE_PRESETS.find(p => p.id === id);
 
 /** Keep only `[A-Za-z0-9_-]`; empty input falls back to a safe generic class. */
 export function sanitizeClassName(name: string): string {
@@ -105,8 +125,10 @@ function compileRulePattern(pattern: string): RegExp | null {
 }
 
 /**
- * Enabled presets' rules + custom rules → compiled `ResolvedRule[]`, in priority order
- * (presets first, then custom). Invalid regex / empty patterns are skipped — never throws.
+ * Enabled presets' rules + custom rules → compiled `ResolvedRule[]`. Presets resolve in
+ * **registry order** (not toggle order) so cross-rule nesting is deterministic — e.g.
+ * `***` is registered before `**` before `*`. Custom rules come last. Invalid regex /
+ * empty patterns are skipped — never throws.
  */
 export function resolveStyleRules(style: StyleConfig): ResolvedRule[] {
   const out: ResolvedRule[] = [];
@@ -114,20 +136,24 @@ export function resolveStyleRules(style: StyleConfig): ResolvedRule[] {
     const re = compileRulePattern(rule.pattern);
     if (re) out.push({ re, className: sanitizeClassName(rule.className) });
   };
-  for (const id of style.presets) {
-    const preset = presetById(id);
-    if (preset?.rule) push(preset.rule);
+  for (const preset of STYLE_PRESETS) {
+    if (!style.presets.includes(preset.id)) continue;
+    for (const rule of preset.rules ?? []) push(rule);
   }
   for (const rule of style.rules) push(rule);
   return out;
 }
 
-/** Enabled-preset CSS + custom CSS, appended after the base BOOK_CSS by the packager. */
+/** Block-level render transforms toggled on by the enabled presets. */
+export function styleRenderOptions(style: StyleConfig): StyleRenderOptions {
+  return { blockquote: STYLE_PRESETS.some(p => p.blockquote && style.presets.includes(p.id)) };
+}
+
+/** Enabled-preset CSS (registry order) + custom CSS, appended after BOOK_CSS by the packager. */
 export function buildStyleCss(style: StyleConfig): string {
   const parts: string[] = [];
-  for (const id of style.presets) {
-    const preset = presetById(id);
-    if (preset?.css) parts.push(preset.css);
+  for (const preset of STYLE_PRESETS) {
+    if (preset.css && style.presets.includes(preset.id)) parts.push(preset.css);
   }
   const custom = style.css.trim();
   if (custom) parts.push(custom);

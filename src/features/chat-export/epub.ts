@@ -10,7 +10,7 @@
  */
 import type { Chapter } from './chapters';
 import { BOOK_CSS, chapterXhtml, escapeXml, navXhtml, type BookMeta } from './render';
-import { buildStyleCss, resolveStyleRules, type StyleConfig } from './style';
+import { buildStyleCss, resolveStyleRules, styleRenderOptions, type StyleConfig } from './style';
 
 interface ZipEntry {
   name: string;
@@ -163,6 +163,7 @@ export function buildEpub(chapters: Chapter[], meta: BookMeta, style?: StyleConf
   const text = (name: string, content: string): ZipEntry => ({ name, data: enc.encode(content) });
 
   const rules = style ? resolveStyleRules(style) : [];
+  const renderOpts = style ? styleRenderOptions(style) : {};
   const styleCss = style ? buildStyleCss(style) : '';
   const css = styleCss ? `${BOOK_CSS}\n${styleCss}\n` : BOOK_CSS;
 
@@ -174,7 +175,7 @@ export function buildEpub(chapters: Chapter[], meta: BookMeta, style?: StyleConf
     text('OEBPS/toc.ncx', tocNcx(chapters, meta, id)),
     text('OEBPS/style.css', css),
     ...(meta.cover ? [{ name: `OEBPS/${meta.cover.href}`, data: meta.cover.data }] : []),
-    ...chapters.map(ch => text(`OEBPS/${chapterHref(ch)}`, chapterXhtml(ch, meta, rules))),
+    ...chapters.map(ch => text(`OEBPS/${chapterHref(ch)}`, chapterXhtml(ch, meta, rules, renderOpts))),
   ];
   return zipStore(entries);
 }

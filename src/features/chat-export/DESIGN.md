@@ -51,22 +51,29 @@
 >
 > **排版样式 — typography presets + advanced CSS/regex (2026-06-20).** ④ 导出 gains a **排版样式** `Section` that
 > styles the EPUB/HTML body. Tiered by audience (the toolbox's users mostly don't code):
-> - **Tier 1 — presets (surfaced first).** A short list of one-click toggles, each a built-in regex→`<span class>` rule
->   **plus** its CSS, wired under the hood so the user never writes either. Shipped presets (`STYLE_PRESETS` in
->   `style.ts`): **加粗对话** (`"…"`/`「…」`/`“…”`/`«…»` → `.st-dialogue` bold), **星号转倾斜** (`*…*` → `.st-emphasis`
->   italic, markers dropped via the capture group), **段首下沉首字** (CSS-only `::first-letter` drop cap, no rule).
+> - **Tier 1 — presets (surfaced first).** A short list of one-click toggles, each carrying built-in regex→`<span class>`
+>   rules and/or a block transform **plus** its CSS, wired under the hood so the user never writes either. Shipped
+>   presets (`STYLE_PRESETS` in `style.ts`): **加粗对话** (`"…"`/`「…」`/`“…”`/`«…»` → `.st-dialogue` bold); **Markdown
+>   标记** — a single toggle rendering `**粗**`→`.st-b`, `*斜*`/`_斜_`→`.st-i`, `***粗斜***`→`.st-bi`, `~~删~~`→`.st-del`
+>   (markers dropped) and block-level `>`/`>>` **blockquotes** (clean left-rule, not the heavy gray box), folding in the
+>   old 星号转倾斜; **段首下沉首字** (CSS-only `::first-letter` drop cap, no rule). A preset can carry multiple ordered
+>   rules; presets resolve in **registry order** (not toggle order) so `***`→`**`→`*` nest correctly regardless of which
+>   the user enabled first. (The `_…_` rule uses lookbehind; on a browser lacking it `parseRegex` returns null and that
+>   one rule is silently skipped — the rest still apply.)
 > - **Tier 2 — advanced (collapsed `高级` disclosure).** The raw escape hatch: custom **匹配 → 类名** rule rows (a
 >   two-field add-row; pattern is a tag or `/regex/flags`, class name is sanitized to `[A-Za-z0-9_-]`) + a free **自定义
 >   CSS** textarea appended to the stylesheet. So a power user can ship a class we didn't, but everyone else just checks
 >   boxes.
 > - **Engine (`style.ts`, pure + `style.check.ts`).** `StyleConfig { presets[]; rules[]; css }`. `resolveStyleRules`
 >   compiles enabled presets' rules + custom rules into `ResolvedRule { re, className }` (skips invalid regex, never
->   throws); `buildStyleCss` concatenates enabled-preset CSS + custom CSS (appended to `BOOK_CSS`). The **decoration**
->   lives in `render.ts` (`bodyToParagraphs(body, rules)` → per-paragraph `decorateInline`) to avoid a render↔style
->   cycle: a **tokenizer** escapes unmatched text and wraps each match's group-1 (else whole match) in
->   `<span class="cls">`, never re-matching inside an already-wrapped span (non-overlapping, rule-order priority). The
->   only HTML ever emitted is our own `<span class>` around **escaped** content — no user HTML injection — so output
->   stays valid XHTML (the `xmllint`/缺层 guard the reference script lacks). `txt.ts` ignores styling (plain text).
+>   throws); `styleRenderOptions` reports block transforms (`{ blockquote }`); `buildStyleCss` concatenates
+>   enabled-preset CSS + custom CSS (appended to `BOOK_CSS`). The **decoration** lives in `render.ts`
+>   (`bodyToParagraphs(body, rules, opts)` → per-paragraph `decorateInline`, plus `renderBlockquote` for `>`/`>>` blocks)
+>   to avoid a render↔style cycle: a **tokenizer** escapes unmatched text and wraps each match's group-1 (else whole
+>   match) in `<span class="cls">`, never re-matching inside an already-wrapped span (non-overlapping, rule-order
+>   priority). The only HTML ever emitted is our own `<span class>`/`<blockquote>`/`<hr>` around **escaped** content — no
+>   user HTML injection — so output stays valid XHTML (the `xmllint`/缺层 guard the reference script lacks). `txt.ts`
+>   ignores styling (plain text).
 > - **Dark-mode caveat.** Presets default to `font-weight`/`font-style` (theme-safe); hardcoded `color` can vanish in a
 >   reader's night theme, so colored styling is left to the advanced CSS field, not a default preset.
 > - **Divider markers → `<hr>`.** A standalone paragraph that is only a divider marker (`---` / `***` / `- - -` /
