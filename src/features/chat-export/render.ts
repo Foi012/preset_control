@@ -81,22 +81,59 @@ export function decorateInline(text: string, rules: ResolvedRule[]): string {
  */
 const DIVIDER_RE = /^(?:-{3,}|\*{3,}|(?:-\s){2,}-|(?:\*\s){2,}\*)$/;
 
+/** Block-level render transforms (mirrors style.ts StyleRenderOptions; kept local to avoid a cycle). */
+export interface RenderOptions {
+  blockquote?: boolean;
+}
+
+const QUOTE_LINE = /^\s*((?:>\s?)+)(.*)$/;
+const inlineOf = (text: string, rules: ResolvedRule[]): string => (rules.length ? decorateInline(text, rules) : escapeBr(text));
+
+/**
+ * Render a `>`-quoted block as (possibly nested) `<blockquote>`. Each line's depth is its
+ * count of leading `>`; deeper runs nest recursively. Quote text still gets inline styling.
+ */
+function renderBlockquote(block: string, rules: ResolvedRule[]): string {
+  const lines = block.split('\n').map(l => {
+    const m = QUOTE_LINE.exec(l);
+    return m ? { depth: (m[1].match(/>/g) ?? []).length, text: m[2].trim() } : { depth: 1, text: l.trim() };
+  });
+  const build = (items: { depth: number; text: string }[], level: number): string => {
+    const parts: string[] = [];
+    let i = 0;
+    while (i < items.length) {
+      if (items[i].depth <= level) {
+        if (items[i].text) parts.push(`<p>${inlineOf(items[i].text, rules)}</p>`);
+        i++;
+      } else {
+        const run: { depth: number; text: string }[] = [];
+        while (i < items.length && items[i].depth > level) run.push(items[i++]);
+        parts.push(build(run, level + 1));
+      }
+    }
+    return `<blockquote>${parts.join('')}</blockquote>`;
+  };
+  return build(lines, 1);
+}
+
 /**
  * Body text → escaped `<p>` blocks (split on blank lines; single newlines → `<br/>`).
- * Divider-only paragraphs become `<hr class="cex-divider"/>`. With styling `rules`, each
- * paragraph's inner text is decorated with `<span class>`s.
+ * Divider-only paragraphs become `<hr class="cex-divider"/>`; with `opts.blockquote`,
+ * `>`-prefixed blocks become nested `<blockquote>`. With styling `rules`, each paragraph's
+ * inner text is decorated with `<span class>`s.
  */
-export function bodyToParagraphs(body: string, rules: ResolvedRule[] = []): string {
-  let lead = true; // first real paragraph gets `cex-lead` (drop-cap hook; skips dividers + any meta line)
+export function bodyToParagraphs(body: string, rules: ResolvedRule[] = [], opts: RenderOptions = {}): string {
+  let lead = true; // first real paragraph gets `cex-lead` (drop-cap hook; skips dividers/quotes + any meta line)
   return body
     .split(/\n{2,}/)
     .map(p => p.trim())
     .filter(Boolean)
     .map(p => {
       if (DIVIDER_RE.test(p)) return '<hr class="cex-divider"/>';
+      if (opts.blockquote && /^\s*>/.test(p)) return renderBlockquote(p, rules);
       const cls = lead ? ' class="cex-lead"' : '';
       lead = false;
-      return `<p${cls}>${rules.length ? decorateInline(p, rules) : escapeBr(p)}</p>`;
+      return `<p${cls}>${inlineOf(p, rules)}</p>`;
     })
     .join('\n');
 }
@@ -107,8 +144,8 @@ export function metaLine(meta: Record<string, string>): string {
   return parts.length ? `<p class="meta">${parts.map(escapeXml).join(' · ')}</p>` : '';
 }
 
-/** One chapter → a full XHTML document. `rules` style the body inline (default: none). */
-export function chapterXhtml(ch: Chapter, meta: BookMeta, rules: ResolvedRule[] = []): string {
+/** One chapter → a full XHTML document. `rules` style the body inline; `opts` toggles block transforms. */
+export function chapterXhtml(ch: Chapter, meta: BookMeta, rules: ResolvedRule[] = [], opts: RenderOptions = {}): string {
   const lang = escapeXml(meta.language || 'zh');
   return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
@@ -122,7 +159,7 @@ export function chapterXhtml(ch: Chapter, meta: BookMeta, rules: ResolvedRule[] 
 <section class="chapter">
 <h1>${escapeXml(ch.title)}</h1>
 ${metaLine(ch.meta)}
-${bodyToParagraphs(ch.body, rules)}
+${bodyToParagraphs(ch.body, rules, opts)}
 </section>
 </body>
 </html>`;

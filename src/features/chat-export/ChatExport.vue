@@ -26,7 +26,7 @@ import { buildChapters, type ChapterRule } from './chapters';
 import { chaptersToTxt } from './txt';
 import { buildEpub } from './epub';
 import { BOOK_CSS, bodyToParagraphs, escapeXml, metaLine, type BookMeta } from './render';
-import { STYLE_PRESETS, buildStyleCss, resolveStyleRules, type StyleConfig, type StyleRule } from './style';
+import { STYLE_PRESETS, buildStyleCss, resolveStyleRules, styleRenderOptions, type StyleConfig, type StyleRule } from './style';
 
 const messages = ref<NormMessage[]>([]);
 const sourceLabel = ref('');
@@ -341,7 +341,7 @@ const previewDoc = computed(() => {
   const extra = buildStyleCss(styleConfig.value);
   const css = extra ? `${BOOK_CSS}\n${extra}` : BOOK_CSS;
   const lang = escapeXml(bookLang.value || 'zh');
-  const body = bodyToParagraphs(ch.body, resolveStyleRules(styleConfig.value));
+  const body = bodyToParagraphs(ch.body, resolveStyleRules(styleConfig.value), styleRenderOptions(styleConfig.value));
   return `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"/><style>${css}</style></head><body><section class="chapter"><h1>${escapeXml(ch.title)}</h1>${metaLine(ch.meta)}${body}</section></body></html>`;
 });
 const rangeSummary = computed(() =>
