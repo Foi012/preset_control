@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import type { ResolvedSection } from '../types';
 import { useConsoleStore } from '../store';
-import PetIcon from './PetIcon.vue';
+import PetIcon from '@/ui/PetIcon.vue';
 
 /**
  * The same structure nav serves both edit contexts. With no `modeId` it reorders the

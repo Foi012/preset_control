@@ -6,7 +6,7 @@
  * partial (indeterminate); `radio` is on/off only. Purely presentational — the parent
  * owns the click + state.
  */
-import PetIcon from './PetIcon.vue';
+import PetIcon from '@/ui/PetIcon.vue';
 
 defineProps<{ type: 'radio' | 'checkbox'; state: 'on' | 'off' | 'partial' }>();
 </script>

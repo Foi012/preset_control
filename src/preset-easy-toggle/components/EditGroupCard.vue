@@ -3,8 +3,8 @@ import { computed, ref } from 'vue';
 import { useConsoleStore, useUiStore } from '../store';
 import type { ResolvedEntry, ResolvedSection } from '../types';
 import EntryRow from './EntryRow.vue';
-import IconButton from './IconButton.vue';
-import Segmented from './Segmented.vue';
+import IconButton from '@/ui/IconButton.vue';
+import Segmented from '@/ui/Segmented.vue';
 
 const props = defineProps<{
   section: ResolvedSection;

@@ -6,7 +6,7 @@
  */
 import { computed } from 'vue';
 import { useConsoleStore, useUiStore } from '../store';
-import ChipButton from './ChipButton.vue';
+import ChipButton from '@/ui/ChipButton.vue';
 
 const ui = useUiStore();
 

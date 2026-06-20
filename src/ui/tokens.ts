@@ -38,6 +38,7 @@ export const scale = {
     sans: `system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif`,
     mono: `'SF Mono', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace`,
     size: {
+      xxs: '10px',
       xs: '11px',
       sm: '12px',
       base: '13px',

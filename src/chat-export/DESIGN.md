@@ -6,6 +6,30 @@
 > module under `src/chat-export/`; nothing in `src/preset-easy-toggle/` depends on it.
 >
 > Sibling spec: `src/preset-easy-toggle/DESIGN.md` (preset console — source of truth for that tool).
+>
+> **UI uses the shared design library (`@/ui/*`), 2026-06-19.** The exporter is still self-contained for its *logic*,
+> but its **UI composes the shared primitives** in `src/ui/` — `Button`, `IconButton`, `Segmented`, `TextField`,
+> `Dropdown`, `Section`, `PetIcon` — and the `--pet-*` tokens, so it matches the preset console (the canonical UI
+> reference). No bespoke buttons/inputs/selects live in `ChatExport.vue`; the remaining `.cex__*` classes are layout +
+> feature-specific bits (stepper, drop zone, diff panes, chips, scan list) only. When adding UI, reach for `@/ui/*` first.
+>
+> **Wizard frame + step UX (2026-06-19).** The tool is a 4-step wizard: **来源 → 规则 → 预览 → 导出**.
+> - **Frame.** `.cex` is a flex column: a fixed **stepper** on top, a scrolling middle (`.cex__scroll`), and a fixed
+>   **Back / Next** footer (`.cex__nav`) — so navigation stays put regardless of content length. Steps are also
+>   clickable directly. 规则/预览/导出 are gated on a chat being loaded; emptying the result snaps back to 来源.
+> - **Stepper.** Each step stacks a **progress bar on top** of a `circle + label`; the bars form the rail. Three
+>   states: **default** (light bar, muted circle + number), **active** (accent bar + accent circle), **done** (strong
+>   bar + ✓). "Done" = a reachable step before the active one (`stepDone()`).
+> - **① 来源.** A hero drop zone (drag `.jsonl`, or 读取当前聊天 / 导入 buttons) with a `sourceState` machine —
+>   **idle / loading / success / error** — driving the zone icon, border tint, and a status line.
+> - **② 规则.** Three `Section`s plus a non-collapsible **扫描标签** scanner on top. **包含内容** = message inclusion
+>   (用户/隐藏楼层) + 提取正文 rules; **排除内容** = strip presets (think/OOC) + custom exclude rules. The scanner
+>   lists chat tags (capped, scrollable, multi-select + batch bar) and routes each to **不处理 / 排除 / 提取** — a
+>   **single bucket per tag**, enforced everywhere (`setTagBucket`, and the add fields cross-clear), so a tag can never
+>   be both excluded and extracted.
+> - **Rule scope.** 排除 applies to **every** message; 提取正文 applies to **assistant** turns only (`extractMessage`).
+>   Body tags (`正文`/`body`/`content`/`text`) and unnamed matches become the chapter **body**; other tags / named
+>   regex groups (e.g. `(?<title>…)`) become labelled **fields** (chapter metadata like title).
 
 ## Why this lives here (toolbox decision)
 

@@ -5,7 +5,7 @@
  * reopens the last-used tool.
  */
 import { useUiStore, type ToolId } from '../store';
-import PetIcon, { type IconName } from './PetIcon.vue';
+import PetIcon, { type IconName } from '@/ui/PetIcon.vue';
 
 const ui = useUiStore();
 

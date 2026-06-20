@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import PetIcon from './PetIcon.vue';
-import type { IconName } from './PetIcon.vue';
+import PetIcon from '@/ui/PetIcon.vue';
+import type { IconName } from '@/ui/PetIcon.vue';
 
 export interface DropdownOption {
   value: string;

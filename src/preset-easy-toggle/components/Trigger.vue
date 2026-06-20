@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import PetIcon from './PetIcon.vue';
+import PetIcon from '@/ui/PetIcon.vue';
 
 const emit = defineEmits<{
   open: [];

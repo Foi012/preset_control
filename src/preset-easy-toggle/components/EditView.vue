@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { flattenSectionEntries, flattenSections, useConsoleStore, useUiStore } from '../store';
-import Dropdown from './Dropdown.vue';
+import Dropdown from '@/ui/Dropdown.vue';
 import EditContextBar from './EditContextBar.vue';
 import EditFolderNav from './EditFolderNav.vue';
 import EditGroupCard from './EditGroupCard.vue';
-import IconButton from './IconButton.vue';
+import IconButton from '@/ui/IconButton.vue';
 import ModeArrange from './ModeArrange.vue';
 import type { ResolvedSection } from '../types';
 import { useHideOnScroll } from '../useHideOnScroll';
