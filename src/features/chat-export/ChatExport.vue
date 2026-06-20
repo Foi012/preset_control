@@ -311,46 +311,62 @@ function setNavScope(scope: string): void {
 // messages; older ones sit behind a #show_more_messages button, so we click it (with a
 // tick between each) until the target mesid renders, then scroll + flash it.
 const jumpError = ref('');
-function stDocument(): Document | null {
-  const w = window as unknown as { SillyTavern?: unknown; parent?: { SillyTavern?: unknown; document?: Document } };
-  if (w.SillyTavern) return document; // native mount — we're in ST's page
-  if (w.parent?.SillyTavern) return w.parent.document ?? null; // iframe mount — ST is the parent
+interface StWindow extends Window {
+  SillyTavern?: unknown;
+  jQuery?: (sel: string | Element) => { length: number; trigger: (event: string) => void };
+}
+function stWindow(): StWindow | null {
+  const w = window as unknown as StWindow & { parent?: StWindow };
+  if (w.SillyTavern) return w; // native mount — we're in ST's page
+  if (w.parent?.SillyTavern) return w.parent; // iframe mount — ST is the parent
   return null;
 }
+const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
 async function jumpToStMessage(srcIndex: number): Promise<void> {
   jumpError.value = '';
-  const doc = stDocument();
+  const win = stWindow();
+  const doc = win?.document;
   if (!doc) {
     jumpError.value = '未能连接到 SillyTavern。';
     return;
   }
   // Not scoped to #chat in case the container id differs across ST versions.
   const find = (): HTMLElement | null => doc.querySelector(`.mes[mesid="${srcIndex}"]`);
-  for (let i = 0; i < 120; i++) {
-    const el = find();
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const prev = el.style.backgroundColor;
-      el.style.transition = 'background-color 0.4s';
-      el.style.backgroundColor = 'rgba(255, 196, 0, 0.28)';
-      setTimeout(() => {
-        el.style.backgroundColor = prev;
-      }, 1400);
-      return;
-    }
-    const more = doc.querySelector('#show_more_messages') as HTMLElement | null;
+  const showMore = (): HTMLElement | null => doc.querySelector('#show_more_messages');
+
+  for (let i = 0; i < 60 && !find(); i++) {
+    const more = showMore();
     if (!more) break; // nothing older left to reveal
-    more.click();
-    await new Promise(resolve => setTimeout(resolve, 150));
+    const before = doc.querySelectorAll('.mes').length;
+    // ST binds the handler via jQuery; trigger it that way (a bare .click() can be
+    // ignored mid-load), then wait until the batch actually renders before clicking again.
+    if (win?.jQuery && win.jQuery('#show_more_messages').length) win.jQuery('#show_more_messages').trigger('click');
+    else more.click();
+    for (let w = 0; w < 30; w++) {
+      await sleep(100);
+      if (find() || doc.querySelectorAll('.mes').length > before) break;
+    }
   }
-  // Couldn't find it — log what the DOM actually looks like so the cause is diagnosable.
+
+  const el = find();
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const prev = el.style.backgroundColor;
+    el.style.transition = 'background-color 0.4s';
+    el.style.backgroundColor = 'rgba(255, 196, 0, 0.28)';
+    setTimeout(() => {
+      el.style.backgroundColor = prev;
+    }, 1400);
+    return;
+  }
   const sample = doc.querySelector('.mes') as HTMLElement | null;
   console.warn('[chat-export] jump-to-ST failed', {
     targetMesid: srcIndex,
-    hasChatContainer: !!doc.querySelector('#chat'),
     mesCount: doc.querySelectorAll('.mes').length,
+    hasShowMore: !!showMore(),
+    usedJquery: !!win?.jQuery,
     sampleMesAttrs: sample ? sample.getAttributeNames() : null,
-    hasShowMore: !!doc.querySelector('#show_more_messages'),
   });
   jumpError.value = '未能在 ST 中定位该消息。请打开浏览器控制台（F12）把 [chat-export] 的诊断信息发我。';
 }
