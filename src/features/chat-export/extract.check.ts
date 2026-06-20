@@ -25,6 +25,8 @@ check('ruleError flags bad regex', ruleError('(').length > 0, true);
 // --- excludes (apply to all messages) -------------------------------------
 check('preset strips <think>', stripExcludes('前<think>x</think>后', { strip: { reasoning: true } }), '前后');
 check('preset strips （OOC：…）', stripExcludes('正文（OOC：注）尾', { strip: { ooc: true } }), '正文尾');
+check('preset strips <!-- comment -->', stripExcludes('前<!-- 注释 -->后', { strip: { comments: true } }), '前后');
+check('comment strip off keeps text', stripExcludes('前<!-- x -->后', { strip: {} }), '前<!-- x -->后');
 check('exclude tag removes block', stripExcludes('a<aside>x</aside>b', { exclude: ['aside'] }), 'ab');
 check('exclude regex removes matches', stripExcludes('a-b-c', { exclude: ['/-/g'] }), 'abc');
 check('bad exclude regex is ignored', stripExcludes('abc', { exclude: ['('] }), 'abc');

@@ -25,10 +25,11 @@ const OOC_RES = [
   /[(（]\s*ooc[\s\S]*?[)）]/gi, // (OOC: …) / （OOC：…）
   /\[\s*ooc[\s\S]*?\]/gi, //       [OOC: …]
 ];
+const COMMENT_RE = /<!--[\s\S]*?-->/g; // HTML comments <!-- … -->
 
 export interface ExtractConfig {
   /** Built-in exclude presets. */
-  strip?: { reasoning?: boolean; ooc?: boolean };
+  strip?: { reasoning?: boolean; ooc?: boolean; comments?: boolean };
   /** Custom exclude rules — each a tag name or `/regex/flags`. Removed from all messages. */
   exclude?: string[];
   /** 正文 rules — tag or regex. Their matches become the chapter body (assistant turns). */
@@ -94,6 +95,7 @@ export function stripExcludes(content: string, config: ExtractConfig): string {
   let out = content;
   if (config.strip?.reasoning) out = out.replace(THINK_RE, '');
   if (config.strip?.ooc) for (const re of OOC_RES) out = out.replace(re, '');
+  if (config.strip?.comments) out = out.replace(COMMENT_RE, '');
   for (const rule of config.exclude ?? []) {
     if (!rule.trim()) continue;
     const tag = asTagName(rule);

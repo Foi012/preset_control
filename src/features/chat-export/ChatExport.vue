@@ -102,6 +102,7 @@ watch(hasData, now => {
 // Phase 2 — strip + extract config (local for now; localStorage persistence is Phase 5).
 const stripReasoning = ref(false);
 const stripOOC = ref(false);
+const stripComments = ref(false);
 const excludeRules = ref<string[]>([]);
 const includeRules = ref<string[]>([]);
 const titleRules = ref<string[]>([]);
@@ -110,7 +111,7 @@ const includeDraft = ref('');
 const titleDraft = ref('');
 
 const config = computed<ExtractConfig>(() => ({
-  strip: { reasoning: stripReasoning.value, ooc: stripOOC.value },
+  strip: { reasoning: stripReasoning.value, ooc: stripOOC.value, comments: stripComments.value },
   exclude: excludeRules.value,
   include: includeRules.value,
   title: titleRules.value,
@@ -488,6 +489,7 @@ function saveRules(): void {
       JSON.stringify({
         stripReasoning: stripReasoning.value,
         stripOOC: stripOOC.value,
+        stripComments: stripComments.value,
         exclude: excludeRules.value,
         include: includeRules.value,
         title: titleRules.value,
@@ -513,6 +515,7 @@ function loadRules(): void {
     const d = JSON.parse(raw);
     if (typeof d.stripReasoning === 'boolean') stripReasoning.value = d.stripReasoning;
     if (typeof d.stripOOC === 'boolean') stripOOC.value = d.stripOOC;
+    if (typeof d.stripComments === 'boolean') stripComments.value = d.stripComments;
     if (Array.isArray(d.exclude)) excludeRules.value = d.exclude.filter((x: unknown) => typeof x === 'string');
     if (Array.isArray(d.include)) includeRules.value = d.include.filter((x: unknown) => typeof x === 'string');
     if (Array.isArray(d.title)) titleRules.value = d.title.filter((x: unknown) => typeof x === 'string');
@@ -535,7 +538,7 @@ function loadRules(): void {
 onMounted(loadRules);
 onUnmounted(revokeCoverPreview);
 watch(
-  [stripReasoning, stripOOC, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss],
+  [stripReasoning, stripOOC, stripComments, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss],
   saveRules,
   { deep: true },
 );
@@ -780,9 +783,12 @@ async function onDrop(event: DragEvent): Promise<void> {
       <Section v-model:open="showExclude" title="排除内容" :default-open="false" size="sm">
         <p class="cex__desc">从每条消息中删除以下内容，不写进书里。</p>
         <div class="cex__opts">
-          <label class="cex__opt"><input type="checkbox" v-model="stripReasoning" /> 去除推理块 &lt;think&gt;</label>
+          <label class="cex__opt"><input type="checkbox" v-model="stripReasoning" /> 去除 &lt;think&gt;</label>
           <label class="cex__opt" title="去除 (OOC: …) / （OOC：…） 等剧情外旁注">
             <input type="checkbox" v-model="stripOOC" /> 去除 OOC 旁注
+          </label>
+          <label class="cex__opt" title="去除 HTML 注释 &lt;!-- … --&gt;">
+            <input type="checkbox" v-model="stripComments" /> 去除注释
           </label>
         </div>
         <RuleField
