@@ -702,17 +702,25 @@ function saveRules(): void {
         styleRules: styleRules.value,
         styleCss: styleCss.value,
         dialogueColor: dialogueColor.value,
+        step: step.value,
+        sourceKind: sourceKind.value,
       }),
     );
   } catch {
     /* ignore */
   }
 }
+// Last step / source, captured by loadRules and consumed once by the mount-time restore.
+let pendingStep: Step | null = null;
+let pendingSource: 'active' | 'jsonl' | null = null;
+
 function loadRules(): void {
   try {
     const raw = window.localStorage?.getItem(RULES_KEY);
     if (!raw) return;
     const d = JSON.parse(raw);
+    if (['rules', 'preview', 'export'].includes(d.step)) pendingStep = d.step;
+    if (d.sourceKind === 'active' || d.sourceKind === 'jsonl') pendingSource = d.sourceKind;
     if (typeof d.stripReasoning === 'boolean') stripReasoning.value = d.stripReasoning;
     if (typeof d.stripOOC === 'boolean') stripOOC.value = d.stripOOC;
     if (typeof d.stripComments === 'boolean') stripComments.value = d.stripComments;
@@ -745,10 +753,19 @@ function loadRules(): void {
     /* ignore malformed */
   }
 }
-onMounted(loadRules);
+// Restore the last step on reopen. The panel unmounts on close, so we re-read the source:
+// only the **active** chat can be re-fetched from ST — a dropped `.jsonl` is gone, so those
+// start back at 来源. If the re-read yields nothing, we stay at 来源 too (never strand a step).
+onMounted(async () => {
+  loadRules();
+  if (pendingStep && pendingSource === 'active') {
+    await readActiveChat(); // sets step to 'rules' on success
+    if (messages.value.length) step.value = pendingStep;
+  }
+});
 onUnmounted(revokeCoverPreview);
 watch(
-  [stripReasoning, stripOOC, stripComments, stripUnclosed, replaceRules, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss, dialogueColor],
+  [step, sourceKind, stripReasoning, stripOOC, stripComments, stripUnclosed, replaceRules, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss, dialogueColor],
   saveRules,
   { deep: true },
 );

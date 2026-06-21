@@ -17,6 +17,11 @@
 > - **Frame.** `.cex` is a flex column: a fixed **stepper** on top, a scrolling middle (`.cex__scroll`), and a fixed
 >   **Back / Next** footer (`.cex__nav`) — so navigation stays put regardless of content length. Steps are also
 >   clickable directly. 规则/预览/导出 are gated on a chat being loaded; emptying the result snaps back to 来源.
+>   **Step is remembered across close/reopen (2026-06-20).** The panel **unmounts** on click-outside (App.vue
+>   `v-if`/`v-else`), so all local state is lost; persisting `step`+`sourceKind` in `cexRules` and restoring on
+>   `onMounted` brings the user back where they were. Restore re-derives the data: only the **active** chat can be
+>   re-read from ST (a dropped `.jsonl` is gone → starts at 来源); if the re-read yields nothing, we stay at 来源 so a
+>   gated step is never stranded.
 > - **Stepper.** Each step stacks a **progress bar on top** of a `circle + label`; the bars form the rail. Three
 >   states: **default** (light bar, muted circle + number), **active** (accent bar + accent circle), **done** (strong
 >   bar + ✓). "Done" = a reachable step before the active one (`stepDone()`).
