@@ -34,6 +34,12 @@ export interface ReplaceRule {
   find: string;
   /** Replacement string (`''` deletes; `$1`/`{{match}}` reference the match). */
   replace: string;
+  /**
+   * Message roles this rule applies to (from ST's `placement`: user-input → user,
+   * AI-output → assistant). Omitted/empty = apply to **all** roles (manual rules, or
+   * imports with no message-text placement).
+   */
+  roles?: Role[];
 }
 
 export interface ExtractConfig {
@@ -134,10 +140,12 @@ export function cleanUnclosedTags(content: string, names: Set<string>): string {
  * (`/pat/flags` or bare); we force a global flag (ST replaces every occurrence) and map
  * ST's `{{match}}` macro to JS `$&`. Invalid patterns are skipped — never throws.
  */
-export function applyReplacements(content: string, rules: ReplaceRule[] | undefined): string {
+export function applyReplacements(content: string, rules: ReplaceRule[] | undefined, role?: Role): string {
   let out = content;
   for (const rule of rules ?? []) {
     if (!rule.find.trim()) continue;
+    // Respect the rule's target roles when a role is known (skip when role-agnostic).
+    if (rule.roles?.length && role && !rule.roles.includes(role)) continue;
     const { re } = parseRegex(rule.find, 'g');
     if (!re) continue;
     out = out.replace(re, rule.replace.replace(/\{\{match\}\}/gi, '$$&'));
@@ -146,8 +154,8 @@ export function applyReplacements(content: string, rules: ReplaceRule[] | undefi
 }
 
 /** Remove built-in presets + custom exclude rules from one message. */
-export function stripExcludes(content: string, config: ExtractConfig): string {
-  let out = applyReplacements(content, config.replace);
+export function stripExcludes(content: string, config: ExtractConfig, role?: Role): string {
+  let out = applyReplacements(content, config.replace, role);
   if (config.strip?.reasoning) out = out.replace(THINK_RE, '');
   if (config.strip?.ooc) for (const re of OOC_RES) out = out.replace(re, '');
   if (config.strip?.comments) out = out.replace(COMMENT_RE, '');
@@ -182,7 +190,7 @@ function eachMatch(re: RegExp, text: string, fn: (m: RegExpExecArray) => void): 
  * fields. User turns and rule-less messages return the whole stripped text as body.
  */
 export function extractMessage(content: string, role: Role, config: ExtractConfig): Extracted {
-  const text = stripExcludes(content, config).trim();
+  const text = stripExcludes(content, config, role).trim();
   const includes = (config.include ?? []).filter(r => r.trim());
   const titles = (config.title ?? []).filter(r => r.trim());
   if (role !== 'assistant' || (includes.length === 0 && titles.length === 0)) {

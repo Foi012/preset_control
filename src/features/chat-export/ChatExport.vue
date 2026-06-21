@@ -22,7 +22,7 @@ import { loadRawMessages } from './chat-source';
 import { normalizeMessages, type NormMessage, type RawMessage } from './normalize';
 import { extractMessage, ruleError, asTagName, parseRegex, type ExtractConfig, type ReplaceRule } from './extract';
 import { scanTags, scanUnclosed } from './scan';
-import { loadStRegexGroups, toReplaceRule, previewRule, type StRegexGroup, type RegexScope } from './st-regex';
+import { loadStRegexGroups, toReplaceRule, previewRule, scriptHasMacro, type StRegexGroup, type RegexScope } from './st-regex';
 import { buildChapters, type ChapterRule } from './chapters';
 import { chaptersToTxt } from './txt';
 import { buildEpub } from './epub';
@@ -146,6 +146,12 @@ function addReplaceRule(): void {
 }
 function removeReplaceRule(i: number): void {
   replaceRules.value.splice(i, 1);
+}
+// A rule's role scope, shown on its chip when it doesn't apply everywhere (from ST placement).
+function ruleScopeLabel(rule: ReplaceRule): string {
+  const roles = rule.roles ?? [];
+  if (!roles.length || (roles.includes('user') && roles.includes('assistant'))) return '';
+  return roles.includes('assistant') ? '仅AI' : '仅用户';
 }
 
 // ST regex import — an always-visible list inside 查找替换 (like the 扫描 list), loaded
@@ -706,7 +712,11 @@ function loadRules(): void {
     if (Array.isArray(d.replace))
       replaceRules.value = d.replace
         .filter((x: unknown): x is ReplaceRule => !!x && typeof (x as ReplaceRule).find === 'string' && typeof (x as ReplaceRule).replace === 'string')
-        .map((x: ReplaceRule) => ({ find: x.find, replace: x.replace }));
+        .map((x: ReplaceRule) => ({
+          find: x.find,
+          replace: x.replace,
+          ...(Array.isArray(x.roles) ? { roles: x.roles.filter(r => r === 'user' || r === 'assistant') } : {}),
+        }));
     if (Array.isArray(d.exclude)) excludeRules.value = d.exclude.filter((x: unknown) => typeof x === 'string');
     if (Array.isArray(d.include)) includeRules.value = d.include.filter((x: unknown) => typeof x === 'string');
     if (Array.isArray(d.title)) titleRules.value = d.title.filter((x: unknown) => typeof x === 'string');
@@ -1047,6 +1057,7 @@ async function onDrop(event: DragEvent): Promise<void> {
                   <span class="cex__import-info">
                     <span class="cex__import-titlerow">
                       <span class="cex__import-name">{{ s.scriptName || '未命名' }}</span>
+                      <span v-if="scriptHasMacro(s)" class="cex__import-badge cex__import-badge--warn" :title="'包含 ST 变量（如 {{user}}），导出时无法展开，可能不生效'">含变量</span>
                       <span v-if="s.disabled" class="cex__import-badge">已停用</span>
                     </span>
                     <code class="cex__import-rule">{{ previewRule(s) }}</code>
@@ -1067,6 +1078,7 @@ async function onDrop(event: DragEvent): Promise<void> {
           <p v-if="replaceFindError" class="cex-rule__error">正则错误：{{ replaceFindError }}</p>
           <div v-if="replaceRules.length" class="cex-rule__chips">
             <span v-for="(r, i) in replaceRules" :key="i" class="cex-rule__chip">
+              <span v-if="ruleScopeLabel(r)" class="cex__rule-scope">{{ ruleScopeLabel(r) }}</span>
               <code>{{ r.find }}</code> → <code>{{ r.replace || '〔删除〕' }}</code>
               <IconButton name="close" title="移除" danger class="cex-rule__chip-x" @click="removeReplaceRule(i)" />
             </span>
@@ -2148,6 +2160,21 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-size: var(--pet-font-size-xxs);
   color: var(--pet-color-text-muted);
   border: 1px solid var(--pet-color-border-strong);
+}
+/* Macro warning — a regex with {{vars}} we can't expand; heavier than the neutral 已停用. */
+.cex__import-badge--warn {
+  color: var(--pet-color-danger-text, var(--pet-color-text));
+  border-color: var(--pet-color-danger, var(--pet-color-border-strong));
+}
+/* Role-scope tag on a replace chip (仅AI / 仅用户). */
+.cex__rule-scope {
+  margin-right: var(--pet-space-xs);
+  padding: 0 4px;
+  border-radius: var(--pet-radius-sm);
+  font-size: var(--pet-font-size-xxs);
+  color: var(--pet-color-text-muted);
+  background: var(--pet-color-surface-sunken, transparent);
+  border: 1px solid var(--pet-color-border);
 }
 .cex__import-rule {
   min-width: 0;

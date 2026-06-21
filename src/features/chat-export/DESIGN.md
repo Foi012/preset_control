@@ -90,8 +90,14 @@
 >   bar once rows are selected (reusing `cex__scanhead`/`cex__scanrow`/`cex__scanpick`), and two-line rows (name +
 >   `find → replace` preview). 全选/导入 act on the **visible (filtered)** rows. `toReplaceRule` maps
 >   `findRegex`/`replaceString` → `{ find, replace }`; disabled scripts show greyed (`· 已停用`) and are hand-pickable.
->   Manual authoring reuses the 高级 two-field add-row (查找 / 替换 + chips). Placement (user vs AI output) is **ignored**
->   — imports apply to every message. Persisted in `cexRules.replace`.
+>   Manual authoring reuses the 高级 two-field add-row (查找 / 替换 + chips). Persisted in `cexRules.replace`.
+> - **Placement-aware + macro flag (2026-06-20).** Imports now respect ST's **`placement`**: `placementRoles` maps
+>   user-input → `user`, AI-output → `assistant`; `ReplaceRule.roles` carries that and `applyReplacements(content,
+>   rules, role)` skips a rule whose roles don't include the message's role (manual rules + non-text placements stay
+>   role-agnostic = all). `extractMessage` threads `role` through `stripExcludes`. So an AI-output cleanup regex no
+>   longer mangles user turns. A restricted rule shows a **仅AI / 仅用户** tag on its chip. Separately, `scriptHasMacro`
+>   flags a find containing `{{…}}` (ST template vars we can't expand) with a **含变量** warning badge in the import
+>   list — imported anyway if the user insists, but honestly marked rather than silently no-op'ing.
 > - **Rule scope.** 排除 applies to **every** message; 正文/标题 apply to **assistant** turns only (`extractMessage`).
 >   Body tags (`正文`/`body`/`content`/`text`) and unnamed matches become the chapter **body**; other tags / named
 >   regex groups (e.g. `(?<title>…)`) become labelled **fields** (chapter metadata like title).
@@ -240,11 +246,9 @@ project's discipline: pure core + `*.check.ts` first, `@/ui` primitives, escape-
    fallback/default on first open, plus book-meta (title/author) remembered per book. Migration: read legacy
    `cexRules` once. **Effort: S–M.** Biggest everyday friction reducer after themes.
 
-4. **导入正则精修 (ST regex import follow-ups).** Now that import shipped: (a) **placement-aware apply** — thread ST's
-   `placement` onto `ReplaceRule` so AI-output regexes hit assistant turns only, user-input ones hit user turns
-   (`extractMessage` already knows role); (b) **flag `substituteRegex`/`{{user}}`-style finds on import** — we can't
-   substitute ST macros, so warn or skip rather than misfire; (c) optional **re-sync** vs the current snapshot.
-   **Effort: S.**
+4. **导入正则精修 (ST regex import follow-ups).** ✅ *(a) placement-aware apply* and *(b) `{{macro}}` flag* shipped
+   (2026-06-20 log). Remaining: optional **re-sync** of imported rules vs the current snapshot (today import is a
+   one-time copy). Low priority. **Effort: S.**
 
 5. **浏览本地聊天 (saved-chats source).** *Export a chat that isn't the open one.* A third `ChatSource` beyond
    `active`/`jsonl`: list ST's saved chat files via the chat-file-list API → load into the same normalizer. **Effort: M**
