@@ -62,6 +62,17 @@
 >   unreliable (rapid clicks ignored mid-load; the wait loop hung), so we **don't auto-expand** — jump if rendered, else
 >   show a `jumpError` asking the user to expand earlier messages first. The 清理后 header shows the message's **floor
 >   number** (`#srcIndex`) so they know how far to expand.
+> - **未闭合标签清理 (2026-06-20).** Tag rules compile a **balanced** `<tag>…</tag>` matcher, so a truncated
+>   reasoning block (`<think>…<EOF>`) or an orphan `</think>` slips into the book untouched — typing `</think>` into
+>   排除内容 doesn't help (it normalizes to the balanced matcher). So `scan.ts` gains a per-message tokenizer/pairer
+>   (`tagTokens` → `unbalancedTags`, stack-paired) shared by the scanner and `extract.ts`; `scanUnclosed` summarizes
+>   per-chat orphans. The 扫描 scanner shows a **未闭合标签** group (the orphan tag names + total) so the user *sees*
+>   them, with a checkbox mirroring the one in 排除内容. The cleanup (`cleanUnclosedTags`, opt-in
+>   `strip.unclosed`) is **lossy by design**: a truncated open drops from the tag to **段末**, an orphan close drops
+>   from **段首** through the tag — so the broken span and its stray marker both go. Scoped to **known structural
+>   tags** (`unclosedNames` = chat's balanced tags ∪ think presets ∪ 排除 rule tags) so a stray `<` in prose is never
+>   mistaken for a tag. Runs **last** in `stripExcludes`, after balanced spans are already gone. Opt-in + a live count
+>   keeps the data loss honest (the preview confirms before export).
 > - **Rule scope.** 排除 applies to **every** message; 正文/标题 apply to **assistant** turns only (`extractMessage`).
 >   Body tags (`正文`/`body`/`content`/`text`) and unnamed matches become the chapter **body**; other tags / named
 >   regex groups (e.g. `(?<title>…)`) become labelled **fields** (chapter metadata like title).

@@ -2,7 +2,7 @@
  * Lightweight check for the two-bucket strip/extract engine.
  * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/extract.check.ts
  */
-import { parseRegex, asTagName, ruleError, stripExcludes, extractMessage } from './extract';
+import { parseRegex, asTagName, ruleError, stripExcludes, extractMessage, cleanUnclosedTags } from './extract';
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -79,6 +79,22 @@ const comp = extractMessage('<think>略</think><正文>纯正文</正文>', 'ass
   include: ['正文'],
 });
 check('exclude before include', comp.body, '纯正文');
+
+// --- 未闭合标签 cleanup (opt-in, lossy) ------------------------------------
+const known = new Set(['think']);
+check('truncated open → drop tag to end', cleanUnclosedTags('keep<think>cut off', known), 'keep');
+check('truncated close → drop start through tag', cleanUnclosedTags('cut off</think>keep', known), 'keep');
+check('balanced span untouched', cleanUnclosedTags('a<think>b</think>c', known), 'a<think>b</think>c');
+check('unknown tag left alone', cleanUnclosedTags('keep<foo>tail', known), 'keep<foo>tail');
+check('empty names set → no-op', cleanUnclosedTags('x<think>y', new Set()), 'x<think>y');
+check(
+  'unclosed cleanup runs after balanced excludes in stripExcludes',
+  stripExcludes('<think>real</think>tail<think>truncated', {
+    strip: { reasoning: true, unclosed: true },
+    unclosedNames: ['think'],
+  }),
+  'tail',
+);
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
 if (failures > 0) process.exit(1);

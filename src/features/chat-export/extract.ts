@@ -16,6 +16,7 @@
  * for the UI to block on (the 缺层 failure the reference 酒馆助手 script guards against).
  */
 import type { Role } from './normalize';
+import { unbalancedTags } from './scan';
 
 /** Tag names whose inner content is the chapter body rather than a labelled field. */
 const BODY_KEYS = new Set(['正文', 'body', 'content', 'text']);
@@ -28,10 +29,16 @@ const OOC_RES = [
 const COMMENT_RE = /<!--[\s\S]*?-->/g; // HTML comments <!-- … -->
 
 export interface ExtractConfig {
-  /** Built-in exclude presets. */
-  strip?: { reasoning?: boolean; ooc?: boolean; comments?: boolean };
+  /** Built-in exclude presets. `unclosed` cleans orphan/dangling tag markers (lossy, opt-in). */
+  strip?: { reasoning?: boolean; ooc?: boolean; comments?: boolean; unclosed?: boolean };
   /** Custom exclude rules — each a tag name or `/regex/flags`. Removed from all messages. */
   exclude?: string[];
+  /**
+   * Tag names treated as structural for the `strip.unclosed` cleanup — only these get
+   * orphan/dangling removal, so a stray `<` in prose is never mistaken for a tag. The UI
+   * fills this from the chat's balanced tags + think presets + excluded-rule tag names.
+   */
+  unclosedNames?: string[];
   /** 正文 rules — tag or regex. Their matches become the chapter body (assistant turns). */
   include?: string[];
   /** 标题 rules — tag or regex. Their matches become the chapter title field. */
@@ -90,6 +97,24 @@ export function ruleError(rule: string): string {
   return parseRegex(rule).error;
 }
 
+/**
+ * Remove orphan / dangling tag markers left after the balanced excludes ran. A truncated
+ * open (`<think>…<EOF>`) drops from the tag to end-of-message; a truncated close
+ * (`…</think>`) drops from start-of-message through the tag — so the broken span and its
+ * stray marker both go. Scoped to `names` (known structural tags) so prose `<` is safe.
+ * Lossy by design, hence opt-in (`strip.unclosed`).
+ */
+export function cleanUnclosedTags(content: string, names: Set<string>): string {
+  if (!names.size) return content;
+  let front = 0; //         remove [0, front)        — past the latest orphan close
+  let back = content.length; // remove [back, len)   — from the earliest orphan open
+  for (const u of unbalancedTags(content, names).values()) {
+    for (const c of u.orphanCloses) front = Math.max(front, c.end);
+    for (const o of u.orphanOpens) back = Math.min(back, o.start);
+  }
+  return front >= back ? '' : content.slice(front, back);
+}
+
 /** Remove built-in presets + custom exclude rules from one message. */
 export function stripExcludes(content: string, config: ExtractConfig): string {
   let out = content;
@@ -107,6 +132,8 @@ export function stripExcludes(content: string, config: ExtractConfig): string {
       if (re) out = out.replace(re, '');
     }
   }
+  // Last: after balanced spans are gone, sweep any orphan/dangling markers that remain.
+  if (config.strip?.unclosed) out = cleanUnclosedTags(out, new Set(config.unclosedNames ?? []));
   return out;
 }
 
