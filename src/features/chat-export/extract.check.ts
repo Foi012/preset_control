@@ -2,7 +2,7 @@
  * Lightweight check for the two-bucket strip/extract engine.
  * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/extract.check.ts
  */
-import { parseRegex, asTagName, ruleError, stripExcludes, extractMessage, cleanUnclosedTags } from './extract';
+import { parseRegex, asTagName, ruleError, stripExcludes, extractMessage, cleanUnclosedTags, applyReplacements } from './extract';
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -95,6 +95,16 @@ check(
   }),
   'tail',
 );
+
+// --- 查找替换 (imported ST regexes) ---------------------------------------
+check('slash+flags replace (删除dashes)', applyReplacements('一——二——三', [{ find: '/——/g', replace: '，' }]), '一，二，三');
+check('bare pattern deletes globally (删除accept)', applyReplacements('[Hugo ACCEPT] hi [Hugo ACCEPT]', [{ find: '\\[(?:Dramatron|Hugo) ACCEPT\\]', replace: '' }]), ' hi ');
+check('bare pattern forced global even without g', applyReplacements('a.a.a', [{ find: '\\.', replace: '-' }]), 'a-a-a');
+check('$1 group ref in replacement', applyReplacements('John Smith', [{ find: '/(\\w+) (\\w+)/', replace: '$2 $1' }]), 'Smith John');
+check('{{match}} macro → whole match', applyReplacements('hi', [{ find: '/hi/', replace: '[{{match}}]' }]), '[hi]');
+check('invalid pattern skipped, others apply', applyReplacements('x y', [{ find: '/[/', replace: 'Z' }, { find: '/y/', replace: 'Y' }]), 'x Y');
+check('empty find is a no-op', applyReplacements('keep', [{ find: '  ', replace: 'X' }]), 'keep');
+check('replace runs before strip in stripExcludes', stripExcludes('<think>a</think>——b', { replace: [{ find: '/——/g', replace: '·' }], strip: { reasoning: true } }), '·b');
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
 if (failures > 0) process.exit(1);

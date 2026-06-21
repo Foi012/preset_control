@@ -28,7 +28,21 @@ const OOC_RES = [
 ];
 const COMMENT_RE = /<!--[\s\S]*?-->/g; // HTML comments <!-- … -->
 
+/** A find→replace rule (typically imported from an ST regex script). */
+export interface ReplaceRule {
+  /** Find pattern — `/pat/flags` or bare. */
+  find: string;
+  /** Replacement string (`''` deletes; `$1`/`{{match}}` reference the match). */
+  replace: string;
+}
+
 export interface ExtractConfig {
+  /**
+   * Find→replace rules, applied **first** (before any strip/extract) to every message.
+   * Mirrors ST's display/prompt regexes, which aren't baked into the stored `mes` and so
+   * must be re-run here. Order within the array is preserved.
+   */
+  replace?: ReplaceRule[];
   /** Built-in exclude presets. `unclosed` cleans orphan/dangling tag markers (lossy, opt-in). */
   strip?: { reasoning?: boolean; ooc?: boolean; comments?: boolean; unclosed?: boolean };
   /** Custom exclude rules — each a tag name or `/regex/flags`. Removed from all messages. */
@@ -115,9 +129,25 @@ export function cleanUnclosedTags(content: string, names: Set<string>): string {
   return front >= back ? '' : content.slice(front, back);
 }
 
+/**
+ * Apply find→replace rules to one message. Each `find` is a tag-less pattern
+ * (`/pat/flags` or bare); we force a global flag (ST replaces every occurrence) and map
+ * ST's `{{match}}` macro to JS `$&`. Invalid patterns are skipped — never throws.
+ */
+export function applyReplacements(content: string, rules: ReplaceRule[] | undefined): string {
+  let out = content;
+  for (const rule of rules ?? []) {
+    if (!rule.find.trim()) continue;
+    const { re } = parseRegex(rule.find, 'g');
+    if (!re) continue;
+    out = out.replace(re, rule.replace.replace(/\{\{match\}\}/gi, '$$&'));
+  }
+  return out;
+}
+
 /** Remove built-in presets + custom exclude rules from one message. */
 export function stripExcludes(content: string, config: ExtractConfig): string {
-  let out = content;
+  let out = applyReplacements(content, config.replace);
   if (config.strip?.reasoning) out = out.replace(THINK_RE, '');
   if (config.strip?.ooc) for (const re of OOC_RES) out = out.replace(re, '');
   if (config.strip?.comments) out = out.replace(COMMENT_RE, '');
