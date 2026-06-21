@@ -20,8 +20,8 @@ import RuleField from './RuleField.vue';
 import SelectMark from '@/ui/SelectMark.vue';
 import { loadRawMessages } from './chat-source';
 import { normalizeMessages, type NormMessage, type RawMessage } from './normalize';
-import { extractMessage, ruleError, type ExtractConfig } from './extract';
-import { scanTags } from './scan';
+import { extractMessage, ruleError, asTagName, type ExtractConfig } from './extract';
+import { scanTags, scanUnclosed } from './scan';
 import { buildChapters, type ChapterRule } from './chapters';
 import { chaptersToTxt } from './txt';
 import { buildEpub } from './epub';
@@ -103,6 +103,7 @@ watch(hasData, now => {
 const stripReasoning = ref(false);
 const stripOOC = ref(false);
 const stripComments = ref(false);
+const stripUnclosed = ref(false);
 const excludeRules = ref<string[]>([]);
 const includeRules = ref<string[]>([]);
 const titleRules = ref<string[]>([]);
@@ -110,8 +111,26 @@ const excludeDraft = ref('');
 const includeDraft = ref('');
 const titleDraft = ref('');
 
+// Tag names the 清理未闭合标签 cleanup is allowed to touch: the chat's balanced structural
+// tags + the think presets + any tag the user routed to 排除. Restricting to these keeps a
+// stray `<` in prose from being mistaken for an unclosed tag.
+const knownTagNames = computed(() => {
+  const names = new Set<string>(['think', 'thinking']);
+  for (const t of scanTags(messages.value.map(m => m.content))) names.add(t.tag);
+  for (const rule of excludeRules.value) {
+    const n = asTagName(rule);
+    if (n) names.add(n);
+  }
+  return names;
+});
+// Unclosed (open/close-unpaired) tags in the chat — surfaced in the scanner so the user
+// can see what 清理未闭合标签 will remove, and its live count.
+const unclosedTags = computed(() => scanUnclosed(messages.value.map(m => m.content), knownTagNames.value));
+const unclosedCount = computed(() => unclosedTags.value.reduce((n, u) => n + u.opens + u.closes, 0));
+
 const config = computed<ExtractConfig>(() => ({
-  strip: { reasoning: stripReasoning.value, ooc: stripOOC.value, comments: stripComments.value },
+  strip: { reasoning: stripReasoning.value, ooc: stripOOC.value, comments: stripComments.value, unclosed: stripUnclosed.value },
+  unclosedNames: [...knownTagNames.value],
   exclude: excludeRules.value,
   include: includeRules.value,
   title: titleRules.value,
@@ -577,6 +596,7 @@ function saveRules(): void {
         stripReasoning: stripReasoning.value,
         stripOOC: stripOOC.value,
         stripComments: stripComments.value,
+        stripUnclosed: stripUnclosed.value,
         exclude: excludeRules.value,
         include: includeRules.value,
         title: titleRules.value,
@@ -603,6 +623,7 @@ function loadRules(): void {
     if (typeof d.stripReasoning === 'boolean') stripReasoning.value = d.stripReasoning;
     if (typeof d.stripOOC === 'boolean') stripOOC.value = d.stripOOC;
     if (typeof d.stripComments === 'boolean') stripComments.value = d.stripComments;
+    if (typeof d.stripUnclosed === 'boolean') stripUnclosed.value = d.stripUnclosed;
     if (Array.isArray(d.exclude)) excludeRules.value = d.exclude.filter((x: unknown) => typeof x === 'string');
     if (Array.isArray(d.include)) includeRules.value = d.include.filter((x: unknown) => typeof x === 'string');
     if (Array.isArray(d.title)) titleRules.value = d.title.filter((x: unknown) => typeof x === 'string');
@@ -625,7 +646,7 @@ function loadRules(): void {
 onMounted(loadRules);
 onUnmounted(revokeCoverPreview);
 watch(
-  [stripReasoning, stripOOC, stripComments, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss],
+  [stripReasoning, stripOOC, stripComments, stripUnclosed, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss],
   saveRules,
   { deep: true },
 );
@@ -788,8 +809,8 @@ async function onDrop(event: DragEvent): Promise<void> {
 
       <!-- Scanner on top: quick scan routes tags into 包含 / 排除 below. -->
       <Section v-model:open="showScan" title="扫描" :default-open="true" size="sm">
-        <p v-if="!scannedTags.length" class="cex__hint">未发现成对标签。</p>
-        <template v-else>
+        <p v-if="!scannedTags.length && !unclosedTags.length" class="cex__hint">未发现成对标签。</p>
+        <template v-if="scannedTags.length">
           <!-- Header row: keep the batch control mounted so selecting rows never
                changes the toolbar height. -->
           <div class="cex__scanhead">
@@ -824,6 +845,20 @@ async function onDrop(event: DragEvent): Promise<void> {
             </div>
           </div>
         </template>
+        <!-- 未闭合 — orphan/dangling tags the balanced list can't show; one toggle cleans them
+             (mirrors the 排除内容 checkbox so it's actionable right where it's surfaced). -->
+        <div v-if="unclosedTags.length" class="cex__unclosed">
+          <div class="cex__unclosed-head">
+            <span class="cex__unclosed-title">未闭合标签</span>
+            <span class="cex__scancount">{{ unclosedCount }}</span>
+          </div>
+          <div class="cex__unclosed-tags">
+            <code v-for="u in unclosedTags" :key="u.tag" class="cex__scantag" :title="`残缺开 ${u.opens} · 残缺闭 ${u.closes}`">&lt;{{ u.tag }}&gt;</code>
+          </div>
+          <label class="cex__opt cex__unclosed-opt" title="截断的 <tag> 删到段末，多余的 </tag> 删到段首（会丢弃残段，请在预览确认）">
+            <input type="checkbox" v-model="stripUnclosed" /> 清理未闭合标签
+          </label>
+        </div>
       </Section>
 
       <!-- INCLUDE — which messages go in, and which spans become body / title. -->
@@ -878,6 +913,9 @@ async function onDrop(event: DragEvent): Promise<void> {
           </label>
           <label class="cex__opt" title="去除 HTML 注释 &lt;!-- … --&gt;">
             <input type="checkbox" v-model="stripComments" /> 去除注释
+          </label>
+          <label class="cex__opt" title="删除未成对的标签：截断的 <tag> 删到段末，多余的 </tag> 删到段首（会丢弃残段，请在预览确认）">
+            <input type="checkbox" v-model="stripUnclosed" /> 清理未闭合标签<template v-if="unclosedCount"> ({{ unclosedCount }})</template>
           </label>
         </div>
         <RuleField
@@ -1481,6 +1519,30 @@ async function onDrop(event: DragEvent): Promise<void> {
   flex: none;
   font-size: var(--pet-font-size-xxs);
   color: var(--pet-color-text-faint);
+}
+/* 未闭合 group — informational, set off from the balanced list by a top rule. */
+.cex__unclosed {
+  margin-top: var(--pet-space-sm);
+  padding-top: var(--pet-space-sm);
+  border-top: 1px solid var(--pet-color-border);
+}
+.cex__unclosed-head {
+  display: flex;
+  align-items: center;
+  gap: var(--pet-space-sm);
+}
+.cex__unclosed-title {
+  font-size: var(--pet-font-size-sm);
+  color: var(--pet-color-text);
+}
+.cex__unclosed-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pet-space-xs) var(--pet-space-sm);
+  margin-top: var(--pet-space-xs);
+}
+.cex__unclosed-opt {
+  margin-top: var(--pet-space-xs);
 }
 .cex__scanall {
   flex: none;
