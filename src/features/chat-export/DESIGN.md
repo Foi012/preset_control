@@ -79,15 +79,19 @@
 >   which are *not* baked into the stored `chat[i].mes` we read — so the only way to reflect them is to re-run them.
 >   `applyReplacements` (pure) forces a global flag (ST replaces every occurrence) and maps ST's `{{match}}` macro to
 >   JS `$&`; invalid patterns are skipped. **Import** (`st-regex.ts`, pure mapping + one impure context read mirroring
->   `chat-source.ts`): `loadStRegexGroups` reads `getContext().extensionSettings.regex` (全局), the card's
->   `data.extensions.regex_scripts` (角色 — `characterId` is coerced via `Number()` since ST sometimes hands back a
->   string index), and `chatMetadata.regex_scripts` (聊天, newer ST). 预设 is surfaced as a scope but stays empty
->   (regex isn't preset-bound in core ST — shown, not faked). The inline picker **mirrors the 扫描 list**: a 全选
->   master that swaps for a batch 导入 bar once items are selected (reusing `cex__scanhead`/`cex__scanrow`/`cex__scanpick`),
->   scope-grouped checkbox rows with a `find → replace` preview, **pre-checking enabled ones** (disabled scripts are off
->   in ST for a reason). `toReplaceRule` maps `findRegex`/`replaceString` → `{ find, replace }`. Manual authoring reuses the 高级 two-field add-row shape (查找 / 替换 + chips). Placement
->   (user vs AI output) is **ignored** — imports apply to every message; deselect on import if unwanted. Persisted in
->   `cexRules.replace`. (Deferred from the first cut, now in: the manual 查找→替换 row ships alongside import.)
+>   `chat-source.ts`): `loadStRegexGroups` reads **three real scopes** — `getContext().extensionSettings.regex` (全局),
+>   the card's `data.extensions.regex_scripts` (角色 — `characterId` is coerced via `Number()` since ST sometimes hands
+>   back a string index), and the **current completion preset's** `extensions.regex_scripts` via `getPresetManager()`
+>   (预设 — `presetScripts` probes `getSelectedPresetName`/`getCompletionPresetByName`/`getSelectedPreset` defensively,
+>   since the PresetManager API is `any` upstream). There is **no** native chat scope, so we don't fake one.
+>   The list is **always shown when 查找替换 is open** (loaded on each open via a `watch`, so a preset/character switch in
+>   ST is picked up) — no import/close buttons — exactly like the 扫描 list. It **mirrors 扫描's shape**: an optional
+>   **scope-filter `Segmented`** (全部 + only the scopes that have scripts), a 全选 master that swaps for a batch **导入**
+>   bar once rows are selected (reusing `cex__scanhead`/`cex__scanrow`/`cex__scanpick`), and two-line rows (name +
+>   `find → replace` preview). 全选/导入 act on the **visible (filtered)** rows. `toReplaceRule` maps
+>   `findRegex`/`replaceString` → `{ find, replace }`; disabled scripts show greyed (`· 已停用`) and are hand-pickable.
+>   Manual authoring reuses the 高级 two-field add-row (查找 / 替换 + chips). Placement (user vs AI output) is **ignored**
+>   — imports apply to every message. Persisted in `cexRules.replace`.
 > - **Rule scope.** 排除 applies to **every** message; 正文/标题 apply to **assistant** turns only (`extractMessage`).
 >   Body tags (`正文`/`body`/`content`/`text`) and unnamed matches become the chapter **body**; other tags / named
 >   regex groups (e.g. `(?<title>…)`) become labelled **fields** (chapter metadata like title).
