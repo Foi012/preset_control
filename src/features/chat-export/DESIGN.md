@@ -139,8 +139,11 @@
 >   `DIALOGUE_RULE`, never double-added), and they emit separate declarations (`font-weight` vs `color`). Because an
 >   EPUB can't adapt a baked-in color to the reader's night mode, the swatches are a curated **dual-safe** set
 >   (`DIALOGUE_COLORS` — 黛蓝/松绿/赭红/酒红/绛紫, each ≥3:1 contrast on both white/sepia *and* dark, verified) rather
->   than a free picker; 无 is the default and an exact hex still lives in 高级 CSS. `sanitizeColor` gates the emitted CSS
->   to a `#rgb`/`#rrggbb` literal so a bad persisted value can't inject. UI: a swatch row under the preset list on ④.
+>   than a free picker; an exact hex still lives in 高级 CSS. `sanitizeColor` gates the emitted CSS to a `#rgb`/`#rrggbb`
+>   literal so a bad persisted value can't inject. UI: a **checkbox (对话颜色) on row 1 gates a swatch row on row 2** —
+>   swatches greyed/unclickable until checked; the picked color persists while off so re-enabling restores it
+>   (`dialogueColorEnabled` + `dialogueColor`, the component emitting `''` when off). Legacy migration: a saved
+>   non-empty `dialogueColor` implies enabled.
 > - **Divider markers → `<hr>`.** A standalone paragraph that is only a divider marker (`---` / `***` / `- - -` /
 >   `* * *`) now renders as `<hr class="cex-divider">` (theme-safe CSS: `border-top` + `opacity`, so it follows the
 >   reader's text color in light/dark). This fixes the 角色分隔线 toggle, which previously emitted a literal `<p>---</p>`,
