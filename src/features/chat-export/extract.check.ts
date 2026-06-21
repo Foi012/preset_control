@@ -105,6 +105,12 @@ check('{{match}} macro → whole match', applyReplacements('hi', [{ find: '/hi/'
 check('invalid pattern skipped, others apply', applyReplacements('x y', [{ find: '/[/', replace: 'Z' }, { find: '/y/', replace: 'Y' }]), 'x Y');
 check('empty find is a no-op', applyReplacements('keep', [{ find: '  ', replace: 'X' }]), 'keep');
 check('replace runs before strip in stripExcludes', stripExcludes('<think>a</think>——b', { replace: [{ find: '/——/g', replace: '·' }], strip: { reasoning: true } }), '·b');
+// placement-aware: an assistant-only rule skips user turns, applies to assistant turns
+check('role-scoped rule applies to its role', applyReplacements('a—b', [{ find: '/—/g', replace: '·', roles: ['assistant'] }], 'assistant'), 'a·b');
+check('role-scoped rule skips other roles', applyReplacements('a—b', [{ find: '/—/g', replace: '·', roles: ['assistant'] }], 'user'), 'a—b');
+check('role-agnostic rule applies to any role', applyReplacements('a—b', [{ find: '/—/g', replace: '·' }], 'user'), 'a·b');
+check('no role given → role filter ignored', applyReplacements('a—b', [{ find: '/—/g', replace: '·', roles: ['assistant'] }]), 'a·b');
+check('extractMessage threads role to replace (user turn skips AI rule)', extractMessage('say—hi', 'user', { replace: [{ find: '/—/g', replace: '·', roles: ['assistant'] }] }).body, 'say—hi');
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
 if (failures > 0) process.exit(1);

@@ -13,6 +13,7 @@
  * mirrors `chat-source.ts` — returns empty groups if ST is unreachable).
  */
 import type { ReplaceRule } from './extract';
+import type { Role } from './normalize';
 
 /** One ST regex script (the fields we use; ST carries more we ignore). */
 export interface StRegexScript {
@@ -42,9 +43,32 @@ const SCOPE_LABEL: Record<RegexScope, string> = {
   preset: '预设',
 };
 
-/** A script → our find→replace rule. Empty `findRegex` yields an empty (skipped) rule. */
+// ST placement codes → the message roles they target (1 = user input, 2 = AI output).
+const PLACEMENT_ROLE: Record<number, Role> = { 1: 'user', 2: 'assistant' };
+
+/**
+ * Resolve ST's `placement` to the message roles a rule should run on. Codes that don't
+ * touch message text (world-info, slash commands) drop out; if nothing maps, returns
+ * `undefined` (apply to all) rather than silently disabling the rule.
+ */
+export function placementRoles(placement?: number[]): Role[] | undefined {
+  if (!Array.isArray(placement) || !placement.length) return undefined;
+  const roles = [...new Set(placement.map(p => PLACEMENT_ROLE[p]).filter(Boolean) as Role[])];
+  return roles.length ? roles : undefined;
+}
+
+/** True when the find pattern contains an ST template macro (`{{user}}`, `{{getvar::x}}`, …). */
+export function scriptHasMacro(script: StRegexScript): boolean {
+  return /\{\{[^}]+\}\}/.test(script.findRegex ?? '');
+}
+
+/** A script → our find→replace rule, carrying its placement-derived target roles. */
 export function toReplaceRule(script: StRegexScript): ReplaceRule {
-  return { find: script.findRegex ?? '', replace: script.replaceString ?? '' };
+  return {
+    find: script.findRegex ?? '',
+    replace: script.replaceString ?? '',
+    roles: placementRoles(script.placement),
+  };
 }
 
 /** Human-readable `find → replace` preview for the import list (replacement shown as 〔删除〕 when empty). */
