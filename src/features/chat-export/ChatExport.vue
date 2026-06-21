@@ -1238,7 +1238,7 @@ async function onDrop(event: DragEvent): Promise<void> {
         />
         <p class="cex__hint">{{ chapterRuleHint }}</p>
         <label v-if="chapterRuleKind === 'every'" class="cex__metafield">
-          每章条数<TextField v-model="everyN" type="number" compact min="1" />
+          每章条数<TextField v-model="everyN" class="cex__numfield" type="number" compact min="1" />
         </label>
 
         <div class="cex__chaphead">
@@ -1640,7 +1640,7 @@ async function onDrop(event: DragEvent): Promise<void> {
 .cex__range-fields--off {
   opacity: 0.38;
 }
-/* Shared small number input — floor range (②), message jump (③), 预览起始章 (④). */
+/* Shared small number input — floor range (②), message jump (③), 每章条数 + 预览起始章 (④). */
 .cex :deep(.cex__numfield) {
   width: 44px;
   padding: 2px var(--pet-space-xs);
