@@ -1045,7 +1045,10 @@ async function onDrop(event: DragEvent): Promise<void> {
                 <button type="button" class="cex__scanpick" @click="toggleImport(`${g.scope}:${i}`)">
                   <SelectMark type="checkbox" :state="selectedImports.has(`${g.scope}:${i}`) ? 'on' : 'off'" size="sm" />
                   <span class="cex__import-info">
-                    <span class="cex__import-name">{{ s.scriptName || '未命名' }}<span v-if="s.disabled" class="cex__import-off"> · 已停用</span></span>
+                    <span class="cex__import-titlerow">
+                      <span class="cex__import-name">{{ s.scriptName || '未命名' }}</span>
+                      <span v-if="s.disabled" class="cex__import-badge">已停用</span>
+                    </span>
                     <code class="cex__import-rule">{{ previewRule(s) }}</code>
                   </span>
                 </button>
@@ -1394,6 +1397,11 @@ async function onDrop(event: DragEvent): Promise<void> {
 .cex__panel {
   display: flex;
   flex-direction: column;
+}
+/* No trailing rule on a step's last Section — nothing follows it but the fixed footer,
+   and it avoids the doubled divider when that Section ends in a nested disclosure. */
+.cex__panel > .ui-section:last-child {
+  border-bottom: none;
 }
 /* Step title — same type as the preset console's section name (pet-section__name). */
 .cex__title {
@@ -2112,17 +2120,34 @@ async function onDrop(event: DragEvent): Promise<void> {
   align-items: flex-start;
 }
 .cex__import-info {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
+/* Name on the left, status badge pinned to the row's right edge. */
+.cex__import-titlerow {
+  display: flex;
+  align-items: center;
+  gap: var(--pet-space-sm);
+}
 .cex__import-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--pet-font-size-sm);
   color: var(--pet-color-text);
 }
-.cex__import-off {
-  color: var(--pet-color-text-faint);
+.cex__import-badge {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: var(--pet-radius-pill);
+  font-size: var(--pet-font-size-xxs);
+  color: var(--pet-color-text-muted);
+  border: 1px solid var(--pet-color-border-strong);
 }
 .cex__import-rule {
   min-width: 0;
