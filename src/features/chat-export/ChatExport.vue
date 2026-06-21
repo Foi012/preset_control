@@ -472,19 +472,17 @@ const styleRules = ref<StyleRule[]>([]);
 const stylePatternDraft = ref('');
 const styleClassDraft = ref('');
 const styleCss = ref('');
-const dialogueColor = ref(''); // '' = none; otherwise a hex from DIALOGUE_COLORS
+// Dialogue color is gated by a checkbox: off → no color emitted; on → the picked swatch
+// (a hex from DIALOGUE_COLORS) applies. The value persists while off so re-enabling restores it.
+const dialogueColorEnabled = ref(false);
+const dialogueColor = ref(DIALOGUE_COLORS[0].value);
 const styleConfig = computed<StyleConfig>(() => ({
   presets: stylePresets.value,
   rules: styleRules.value,
   css: styleCss.value,
-  dialogueColor: dialogueColor.value,
+  dialogueColor: dialogueColorEnabled.value ? dialogueColor.value : '',
 }));
 const stylePatternError = computed(() => ruleError(stylePatternDraft.value));
-
-// Toggle a dialogue swatch — clicking the active one clears it back to 无.
-function pickDialogueColor(value: string): void {
-  dialogueColor.value = dialogueColor.value === value ? '' : value;
-}
 
 function togglePreset(id: string): void {
   const i = stylePresets.value.indexOf(id);
@@ -702,6 +700,7 @@ function saveRules(): void {
         styleRules: styleRules.value,
         styleCss: styleCss.value,
         dialogueColor: dialogueColor.value,
+        dialogueColorEnabled: dialogueColorEnabled.value,
         step: step.value,
         sourceKind: sourceKind.value,
       }),
@@ -748,7 +747,10 @@ function loadRules(): void {
         .filter((x: unknown): x is StyleRule => !!x && typeof (x as StyleRule).pattern === 'string' && typeof (x as StyleRule).className === 'string')
         .map((x: StyleRule) => ({ pattern: x.pattern, className: x.className }));
     if (typeof d.styleCss === 'string') styleCss.value = d.styleCss;
-    if (typeof d.dialogueColor === 'string') dialogueColor.value = d.dialogueColor;
+    // Migrate the old string-only field: a non-empty saved color means it was enabled.
+    if (typeof d.dialogueColor === 'string' && d.dialogueColor) dialogueColor.value = d.dialogueColor;
+    if (typeof d.dialogueColorEnabled === 'boolean') dialogueColorEnabled.value = d.dialogueColorEnabled;
+    else if (typeof d.dialogueColor === 'string' && d.dialogueColor) dialogueColorEnabled.value = true;
   } catch {
     /* ignore malformed */
   }
@@ -765,7 +767,7 @@ onMounted(async () => {
 });
 onUnmounted(revokeCoverPreview);
 watch(
-  [step, sourceKind, stripReasoning, stripOOC, stripComments, stripUnclosed, replaceRules, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss, dialogueColor],
+  [step, sourceKind, stripReasoning, stripOOC, stripComments, stripUnclosed, replaceRules, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss, dialogueColor, dialogueColorEnabled],
   saveRules,
   { deep: true },
 );
@@ -1275,27 +1277,21 @@ async function onDrop(event: DragEvent): Promise<void> {
           </li>
         </ul>
 
-        <!-- Dialogue color — independent of 加粗对话; swatches are dual-safe (legible in
-             light & dark readers). 无 clears it; an exact hex still lives in 高级 CSS. -->
+        <!-- Dialogue color — independent of 加粗对话; gated by a checkbox. Swatches are
+             dual-safe (legible in light & dark readers); an exact hex still lives in 高级 CSS. -->
         <div class="cex__dlgcolor">
-          <span class="cex__dlgcolor-label">对话颜色</span>
-          <div class="cex__swatches">
-            <button
-              type="button"
-              class="cex__swatch cex__swatch--none"
-              :class="{ 'cex__swatch--on': !dialogueColor }"
-              title="无"
-              @click="dialogueColor = ''"
-            ><i class="cex__swatch-none-mark" /></button>
+          <label class="cex__opt"><input type="checkbox" v-model="dialogueColorEnabled" /> 对话颜色</label>
+          <div class="cex__swatches" :class="{ 'cex__swatches--off': !dialogueColorEnabled }">
             <button
               v-for="c in DIALOGUE_COLORS"
               :key="c.value"
               type="button"
               class="cex__swatch"
-              :class="{ 'cex__swatch--on': dialogueColor === c.value }"
+              :class="{ 'cex__swatch--on': dialogueColorEnabled && dialogueColor === c.value }"
               :style="{ background: c.value }"
               :title="c.label"
-              @click="pickDialogueColor(c.value)"
+              :disabled="!dialogueColorEnabled"
+              @click="dialogueColor = c.value"
             />
           </div>
         </div>
@@ -2155,20 +2151,22 @@ async function onDrop(event: DragEvent): Promise<void> {
   line-height: var(--pet-font-leading-normal);
   color: var(--pet-color-text-faint);
 }
-/* Dialogue color swatch row. */
+/* Dialogue color — checkbox + title on row 1, swatches on row 2. */
 .cex__dlgcolor {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--pet-space-sm);
   margin-top: var(--pet-space-md);
-}
-.cex__dlgcolor-label {
-  font-size: var(--pet-font-size-sm);
-  color: var(--pet-color-text);
 }
 .cex__swatches {
   display: flex;
   gap: var(--pet-space-xs);
+  margin-left: calc(var(--pet-space-sm) + 14px);
+}
+/* Disabled until the checkbox is on — greyed and unclickable. */
+.cex__swatches--off {
+  opacity: 0.4;
+  pointer-events: none;
 }
 .cex__swatch {
   width: 22px;
@@ -2177,24 +2175,10 @@ async function onDrop(event: DragEvent): Promise<void> {
   border-radius: var(--pet-radius-pill);
   border: 1px solid var(--pet-color-border-strong);
   cursor: pointer;
-  position: relative;
 }
 /* Selected ring — offset so it reads against any swatch fill. */
 .cex__swatch--on {
   box-shadow: 0 0 0 2px var(--pet-color-bg, #fff), 0 0 0 4px var(--pet-color-accent);
-}
-.cex__swatch--none {
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-/* 无 swatch — a diagonal slash to read as "no color". */
-.cex__swatch-none-mark {
-  width: 18px;
-  height: 1px;
-  background: var(--pet-color-text-faint);
-  transform: rotate(-45deg);
 }
 /* Advanced: two-field custom rule row (匹配 + 类名). Pattern grows, class is fixed-ish. */
 .cex__stylerule :deep(.pet-field) {
