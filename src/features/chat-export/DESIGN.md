@@ -214,6 +214,48 @@ ST or DOM, so Phase 1–2 risk is validated before any UI — same risk-first or
 4. **Chapters + HTML (done).** `chapters.ts` boundary rules (每条 AI 回复 / 每条消息 / 按 title 标记 / 每 N 条), auto `第N章` titles, captured fields → chapter meta. `render.ts` semantic XHTML + conservative CSS + EPUB3 nav. Book metadata (title/author/language). **TXT export shipped here** (`txt.ts`). The ④ 导出 step shows book setup + chapter rule + chapter-list preview.
 5. **EPUB packaging (done).** `epub.ts` — dependency-free store-method ZIP (CRC32 + OCF layout), `buildEpub(chapters, meta)` → `.epub`; `unzip`/`xmllint`-validated. 导出 EPUB + 导出 TXT buttons wired. Rule set persisted to localStorage (`cexRules`). **All phases 0–5 complete.**
 
+## Backlog (deferred — design sketches)
+
+Captured so they're actionable later. Ordered by my read of value/effort; none are committed. Each keeps the
+project's discipline: pure core + `*.check.ts` first, `@/ui` primitives, escape-then-wrap (valid XHTML), theme-safe CSS.
+
+1. **书籍主题 / write themes (排版 layout tier).** *The natural completion of styling, user already wants it.*
+   A **single-select** named-theme layer at *book* scope, distinct from the inline presets (which decorate spans):
+   each theme is a CSS bundle — body font stack, line-height, paragraph model (indent vs spaced), justification,
+   `h1`/chapter-opener treatment, drop-cap, TOC styling — keyed to a genre/taste (经典 / 现代 / 学术 / 侦探 …, à la
+   Leopardi/Calvino/Isaacson). Model: `BOOK_THEMES` registry in `style.ts`, `theme: string` on `StyleConfig`,
+   composed *under* the inline presets in `buildStyleCss` (theme = base layout, presets = inline accents). Preview
+   through the **existing WYSIWYG `<iframe>`** (title page + chapter open). Theme-safe: prefer `currentColor`/opacity;
+   any color a theme sets must survive a reader night-mode (or ship light/dark-aware variables). UI: a `Segmented`
+   or a small thumbnail picker on ④. **Effort: M.** Closes the original feature-#3 ask.
+
+2. **Markdown 正文渲染.** *Many ST chats are markdown; today only inline emphasis + `>` blockquote are handled
+   (via the markdown preset's regex).* A conservative **block-level** MD→XHTML pass in `render.ts` (headings `#`,
+   `-`/`1.` lists, fenced code, `---` hr already done, links) — a tiny purpose-built parser, **not** regex spaghetti,
+   keeping escape-then-wrap so output can't break XHTML. Gate behind a preset/toggle so non-MD chats are unaffected.
+   TXT stays literal. **Effort: M–L** (the parser is the risk; cover it with `render.check.ts` first).
+
+3. **按卡/聊天记忆规则 (per-card config).** *Today `cexRules` is one global last-used set — multi-card users re-set
+   rules each export.* Key persistence by card/chat id (from `getContext`): `cexRules:<id>` with the global set as the
+   fallback/default on first open, plus book-meta (title/author) remembered per book. Migration: read legacy
+   `cexRules` once. **Effort: S–M.** Biggest everyday friction reducer after themes.
+
+4. **导入正则精修 (ST regex import follow-ups).** Now that import shipped: (a) **placement-aware apply** — thread ST's
+   `placement` onto `ReplaceRule` so AI-output regexes hit assistant turns only, user-input ones hit user turns
+   (`extractMessage` already knows role); (b) **flag `substituteRegex`/`{{user}}`-style finds on import** — we can't
+   substitute ST macros, so warn or skip rather than misfire; (c) optional **re-sync** vs the current snapshot.
+   **Effort: S.**
+
+5. **浏览本地聊天 (saved-chats source).** *Export a chat that isn't the open one.* A third `ChatSource` beyond
+   `active`/`jsonl`: list ST's saved chat files via the chat-file-list API → load into the same normalizer. **Effort: M**
+   (the ST API surface is the unknown; everything downstream is shared).
+
+6. **书籍元数据补全.** `date` + `description` OPF fields (cover already ships). Small, low-priority. **Effort: S.**
+
+7. **未闭合清理范围控制 (optional).** The 清理未闭合标签 toggle is currently scoped to *known* structural tags. If
+   users hit a case it misses, expose a small choice (known-only ↔ any tag-shaped token). Only if it comes up.
+   **Effort: S.**
+
 ## Reference (attribution)
 
 Modelled on the community 酒馆助手 script **聊天记录导出 v6.0.9** (chain: Yellows → 429639 → Lune), which proves
