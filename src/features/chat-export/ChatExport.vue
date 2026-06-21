@@ -170,6 +170,20 @@ function toggleImport(key: string): void {
   next.has(key) ? next.delete(key) : next.add(key);
   selectedImports.value = next;
 }
+// Master select-all for the import list — on / off / partial, mirroring the 扫描 list.
+const allImportKeys = computed(() => {
+  const keys: string[] = [];
+  for (const g of regexGroups.value) g.scripts.forEach((_, i) => keys.push(`${g.scope}:${i}`));
+  return keys;
+});
+const importSelectAllState = computed<'on' | 'off' | 'partial'>(() => {
+  const sel = selectedImports.value.size;
+  if (!sel) return 'off';
+  return sel >= allImportKeys.value.length ? 'on' : 'partial';
+});
+function toggleImportSelectAll(): void {
+  selectedImports.value = importSelectAllState.value === 'on' ? new Set() : new Set(allImportKeys.value);
+}
 function confirmRegexImport(): void {
   for (const g of regexGroups.value) {
     g.scripts.forEach((s, i) => {
@@ -994,30 +1008,38 @@ async function onDrop(event: DragEvent): Promise<void> {
         <div class="cex-rule">
           <Button variant="secondary" size="sm" icon="download" @click="openRegexImport">导入 ST 正则</Button>
 
-          <!-- Inline import picker: list ST's regex scripts grouped by scope, pick + 导入. -->
+          <!-- Inline import picker — same shape as 扫描: 全选 master that swaps for a batch
+               import bar once items are selected, then scope-grouped checkbox rows. -->
           <div v-if="showRegexImport" class="cex__import">
-            <p v-if="!importableGroups.length" class="cex__hint">未找到可导入的 ST 正则（全局 / 角色 / 预设均为空）。</p>
-            <template v-else>
-              <div v-for="g in importableGroups" :key="g.scope" class="cex__import-group">
-                <div class="cex__import-scope">{{ g.label }}</div>
-                <button
-                  v-for="(s, i) in g.scripts"
-                  :key="i"
-                  type="button"
-                  class="cex__import-row"
-                  @click="toggleImport(`${g.scope}:${i}`)"
-                >
-                  <SelectMark type="checkbox" :state="selectedImports.has(`${g.scope}:${i}`) ? 'on' : 'off'" size="sm" />
-                  <span class="cex__import-info">
-                    <span class="cex__import-name">{{ s.scriptName || '未命名' }}<span v-if="s.disabled" class="cex__import-off"> · 已停用</span></span>
-                    <code class="cex__import-rule">{{ previewRule(s) }}</code>
-                  </span>
+            <template v-if="importableGroups.length">
+              <div class="cex__scanhead">
+                <button type="button" class="cex__scanpick cex__scanall" @click="toggleImportSelectAll">
+                  <SelectMark type="checkbox" :state="importSelectAllState" size="sm" />
+                  <span class="cex__scanall-label">全选</span>
                 </button>
+                <div class="cex__scanbatch" :class="{ 'cex__scanbatch--idle': !selectedImports.size }" :aria-hidden="!selectedImports.size">
+                  <span class="cex__scanbatch-count">{{ selectedImports.size ? `已选 ${selectedImports.size} 项` : '未选择' }}</span>
+                  <Button variant="primary" size="sm" :disabled="!selectedImports.size" @click="confirmRegexImport">导入</Button>
+                </div>
+              </div>
+              <div class="cex__scanlist">
+                <div v-for="g in importableGroups" :key="g.scope" class="cex__import-group">
+                  <div class="cex__import-scope">{{ g.label }}</div>
+                  <div v-for="(s, i) in g.scripts" :key="i" class="cex__scanrow">
+                    <button type="button" class="cex__scanpick" @click="toggleImport(`${g.scope}:${i}`)">
+                      <SelectMark type="checkbox" :state="selectedImports.has(`${g.scope}:${i}`) ? 'on' : 'off'" size="sm" />
+                      <span class="cex__import-info">
+                        <span class="cex__import-name">{{ s.scriptName || '未命名' }}<span v-if="s.disabled" class="cex__import-off"> · 已停用</span></span>
+                        <code class="cex__import-rule">{{ previewRule(s) }}</code>
+                      </span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </template>
+            <p v-else class="cex__hint">未找到可导入的 ST 正则（全局 / 角色 / 聊天 / 预设均为空）。</p>
             <div class="cex__import-actions">
-              <Button variant="ghost" size="sm" @click="showRegexImport = false">取消</Button>
-              <Button variant="primary" size="sm" :disabled="!selectedImports.size" @click="confirmRegexImport">导入所选 ({{ selectedImports.size }})</Button>
+              <Button variant="ghost" size="sm" @click="showRegexImport = false">关闭</Button>
             </div>
           </div>
 
@@ -2075,16 +2097,9 @@ async function onDrop(event: DragEvent): Promise<void> {
   letter-spacing: 0.04em;
   margin-bottom: var(--pet-space-xs);
 }
-.cex__import-row {
-  display: flex;
+/* Import rows reuse .cex__scanrow/.cex__scanpick; this aligns the two-line info block. */
+.cex__import .cex__scanpick {
   align-items: flex-start;
-  gap: var(--pet-space-sm);
-  width: 100%;
-  padding: var(--pet-space-xs) 0;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  text-align: left;
 }
 .cex__import-info {
   min-width: 0;
