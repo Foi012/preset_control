@@ -22,7 +22,7 @@ import { loadRawMessages } from './chat-source';
 import { normalizeMessages, type NormMessage, type RawMessage } from './normalize';
 import { extractMessage, ruleError, asTagName, parseRegex, type ExtractConfig, type ReplaceRule } from './extract';
 import { scanTags, scanUnclosed } from './scan';
-import { loadStRegexGroups, toReplaceRule, previewRule, type StRegexGroup } from './st-regex';
+import { loadStRegexGroups, toReplaceRule, previewRule, type StRegexGroup, type RegexScope } from './st-regex';
 import { buildChapters, type ChapterRule } from './chapters';
 import { chaptersToTxt } from './txt';
 import { buildEpub } from './epub';
@@ -148,41 +148,50 @@ function removeReplaceRule(i: number): void {
   replaceRules.value.splice(i, 1);
 }
 
-// ST regex import — a collapsible picker over the chat's available regex scripts.
-const showRegexImport = ref(false);
+// ST regex import — an always-visible list inside 查找替换 (like the 扫描 list), loaded
+// when the section opens. Each row is one ST regex script; selecting + 导入 turns the
+// chosen ones into replace rules below. Keys are `${scope}:${index}`.
 const regexGroups = ref<StRegexGroup[]>([]);
-const selectedImports = ref<Set<string>>(new Set()); // keys = `${scope}:${index}`
+const selectedImports = ref<Set<string>>(new Set());
+const regexScopeFilter = ref<'all' | RegexScope>('all');
 const importableGroups = computed(() => regexGroups.value.filter(g => g.scripts.length));
+// 全部 + a tab per non-empty scope, so the filter only offers scopes that actually exist.
+const regexScopeOptions = computed(() => [
+  { value: 'all', label: '全部' },
+  ...importableGroups.value.map(g => ({ value: g.scope, label: g.label })),
+]);
+const visibleGroups = computed(() =>
+  regexScopeFilter.value === 'all' ? importableGroups.value : importableGroups.value.filter(g => g.scope === regexScopeFilter.value),
+);
 
-function openRegexImport(): void {
+function loadRegexList(): void {
   regexGroups.value = loadStRegexGroups();
+  if (!importableGroups.value.some(g => g.scope === regexScopeFilter.value)) regexScopeFilter.value = 'all';
   selectedImports.value = new Set();
-  // Pre-check the enabled scripts only — disabled ones are off in ST for a reason.
-  for (const g of regexGroups.value) {
-    g.scripts.forEach((s, i) => {
-      if (!s.disabled) selectedImports.value.add(`${g.scope}:${i}`);
-    });
-  }
-  showRegexImport.value = true;
 }
+
 function toggleImport(key: string): void {
   const next = new Set(selectedImports.value);
   next.has(key) ? next.delete(key) : next.add(key);
   selectedImports.value = next;
 }
-// Master select-all for the import list — on / off / partial, mirroring the 扫描 list.
-const allImportKeys = computed(() => {
+// Master select-all over the *visible* rows — on / off / partial, mirroring the 扫描 list.
+const visibleImportKeys = computed(() => {
   const keys: string[] = [];
-  for (const g of regexGroups.value) g.scripts.forEach((_, i) => keys.push(`${g.scope}:${i}`));
+  for (const g of visibleGroups.value) g.scripts.forEach((_, i) => keys.push(`${g.scope}:${i}`));
   return keys;
 });
 const importSelectAllState = computed<'on' | 'off' | 'partial'>(() => {
-  const sel = selectedImports.value.size;
+  const visible = visibleImportKeys.value;
+  const sel = visible.filter(k => selectedImports.value.has(k)).length;
   if (!sel) return 'off';
-  return sel >= allImportKeys.value.length ? 'on' : 'partial';
+  return sel >= visible.length ? 'on' : 'partial';
 });
 function toggleImportSelectAll(): void {
-  selectedImports.value = importSelectAllState.value === 'on' ? new Set() : new Set(allImportKeys.value);
+  const next = new Set(selectedImports.value);
+  if (importSelectAllState.value === 'on') visibleImportKeys.value.forEach(k => next.delete(k));
+  else visibleImportKeys.value.forEach(k => next.add(k));
+  selectedImports.value = next;
 }
 function confirmRegexImport(): void {
   for (const g of regexGroups.value) {
@@ -192,7 +201,7 @@ function confirmRegexImport(): void {
       if (rule.find.trim()) replaceRules.value.push(rule);
     });
   }
-  showRegexImport.value = false;
+  selectedImports.value = new Set();
 }
 
 const config = computed<ExtractConfig>(() => ({
@@ -727,6 +736,8 @@ watch(
 watch([limitRange, rangeStart, rangeEnd], () => {
   if (rawMessages.value.length) applyFilters();
 });
+// (Re)read ST's regex scripts whenever 查找替换 opens — picks up a preset/character switch.
+watch(showReplace, open => open && loadRegexList());
 
 /** Assistant turns whose 正文/标题 rules matched nothing (the 缺层 warning). */
 const unmatchedCount = computed(() => {
@@ -1004,45 +1015,47 @@ async function onDrop(event: DragEvent): Promise<void> {
 
       <!-- REPLACE — find→replace cleanup; import existing ST regexes or add manually. -->
       <Section v-model:open="showReplace" title="查找替换" :default-open="false" size="sm">
-        <p class="cex__desc">把匹配到的文本替换成另一段（留空即删除）。可直接导入 ST 现有正则。</p>
-        <div class="cex-rule">
-          <Button variant="secondary" size="sm" icon="download" @click="openRegexImport">导入 ST 正则</Button>
+        <p class="cex__desc">导入 ST 现有正则，或自定义查找→替换（留空即删除）。</p>
 
-          <!-- Inline import picker — same shape as 扫描: 全选 master that swaps for a batch
-               import bar once items are selected, then scope-grouped checkbox rows. -->
-          <div v-if="showRegexImport" class="cex__import">
-            <template v-if="importableGroups.length">
-              <div class="cex__scanhead">
-                <button type="button" class="cex__scanpick cex__scanall" @click="toggleImportSelectAll">
-                  <SelectMark type="checkbox" :state="importSelectAllState" size="sm" />
-                  <span class="cex__scanall-label">全选</span>
-                </button>
-                <div class="cex__scanbatch" :class="{ 'cex__scanbatch--idle': !selectedImports.size }" :aria-hidden="!selectedImports.size">
-                  <span class="cex__scanbatch-count">{{ selectedImports.size ? `已选 ${selectedImports.size} 项` : '未选择' }}</span>
-                  <Button variant="primary" size="sm" :disabled="!selectedImports.size" @click="confirmRegexImport">导入</Button>
-                </div>
-              </div>
-              <div class="cex__scanlist">
-                <div v-for="g in importableGroups" :key="g.scope" class="cex__import-group">
-                  <div class="cex__import-scope">{{ g.label }}</div>
-                  <div v-for="(s, i) in g.scripts" :key="i" class="cex__scanrow">
-                    <button type="button" class="cex__scanpick" @click="toggleImport(`${g.scope}:${i}`)">
-                      <SelectMark type="checkbox" :state="selectedImports.has(`${g.scope}:${i}`) ? 'on' : 'off'" size="sm" />
-                      <span class="cex__import-info">
-                        <span class="cex__import-name">{{ s.scriptName || '未命名' }}<span v-if="s.disabled" class="cex__import-off"> · 已停用</span></span>
-                        <code class="cex__import-rule">{{ previewRule(s) }}</code>
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </template>
-            <p v-else class="cex__hint">未找到可导入的 ST 正则（全局 / 角色 / 聊天 / 预设均为空）。</p>
-            <div class="cex__import-actions">
-              <Button variant="ghost" size="sm" @click="showRegexImport = false">关闭</Button>
+        <!-- ST regex list — same shape as 扫描: scope filter, then a 全选 master that swaps
+             for a batch 导入 bar once rows are selected. Auto-loaded when the section opens. -->
+        <template v-if="importableGroups.length">
+          <Segmented
+            v-if="regexScopeOptions.length > 2"
+            size="sm"
+            :model-value="regexScopeFilter"
+            :options="regexScopeOptions"
+            class="cex__scopefilter"
+            @update:model-value="regexScopeFilter = $event as 'all' | RegexScope"
+          />
+          <div class="cex__scanhead">
+            <button type="button" class="cex__scanpick cex__scanall" @click="toggleImportSelectAll">
+              <SelectMark type="checkbox" :state="importSelectAllState" size="sm" />
+              <span class="cex__scanall-label">全选</span>
+            </button>
+            <div class="cex__scanbatch" :class="{ 'cex__scanbatch--idle': !selectedImports.size }" :aria-hidden="!selectedImports.size">
+              <span class="cex__scanbatch-count">{{ selectedImports.size ? `已选 ${selectedImports.size} 项` : '未选择' }}</span>
+              <Button variant="primary" size="sm" :disabled="!selectedImports.size" @click="confirmRegexImport">导入</Button>
             </div>
           </div>
+          <div class="cex__scanlist cex__importlist">
+            <div v-for="g in visibleGroups" :key="g.scope" class="cex__import-group">
+              <div v-if="regexScopeFilter === 'all'" class="cex__import-scope">{{ g.label }}</div>
+              <div v-for="(s, i) in g.scripts" :key="i" class="cex__scanrow">
+                <button type="button" class="cex__scanpick" @click="toggleImport(`${g.scope}:${i}`)">
+                  <SelectMark type="checkbox" :state="selectedImports.has(`${g.scope}:${i}`) ? 'on' : 'off'" size="sm" />
+                  <span class="cex__import-info">
+                    <span class="cex__import-name">{{ s.scriptName || '未命名' }}<span v-if="s.disabled" class="cex__import-off"> · 已停用</span></span>
+                    <code class="cex__import-rule">{{ previewRule(s) }}</code>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+        <p v-else class="cex__hint">未发现可导入的 ST 正则。</p>
 
+        <div class="cex-rule">
           <div class="cex-rule__row cex__stylerule">
             <TextField v-model="replaceFindDraft" mono :invalid="!!replaceFindError" spellcheck="false" placeholder="查找，如 /——/g" @keyup.enter="addReplaceRule" />
             <TextField v-model="replaceReplDraft" mono spellcheck="false" placeholder="替换为（留空 = 删除）" class="cex__styleclass" @keyup.enter="addReplaceRule" />
@@ -2079,13 +2092,10 @@ async function onDrop(event: DragEvent): Promise<void> {
 .cex__styleclass {
   flex: 0 1 8em;
 }
-/* ST regex import picker — inline list of scripts grouped by scope. */
-.cex__import {
-  margin: var(--pet-space-sm) 0;
-  padding: var(--pet-space-sm);
-  border: 1px solid var(--pet-color-border);
-  border-radius: var(--pet-radius-sm);
-  background: var(--pet-color-surface-sunken, transparent);
+/* ST regex import — reuses the 扫描 list (.cex__scanhead/.cex__scanrow/.cex__scanpick).
+   These classes only style the import-specific bits: scope filter + two-line rows. */
+.cex__scopefilter {
+  margin-bottom: var(--pet-space-sm);
 }
 .cex__import-group + .cex__import-group {
   margin-top: var(--pet-space-sm);
@@ -2097,8 +2107,8 @@ async function onDrop(event: DragEvent): Promise<void> {
   letter-spacing: 0.04em;
   margin-bottom: var(--pet-space-xs);
 }
-/* Import rows reuse .cex__scanrow/.cex__scanpick; this aligns the two-line info block. */
-.cex__import .cex__scanpick {
+/* Import rows carry a two-line info block, so top-align the checkbox to the name. */
+.cex__importlist .cex__scanpick {
   align-items: flex-start;
 }
 .cex__import-info {
@@ -2122,12 +2132,6 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-family: var(--pet-font-mono);
   font-size: var(--pet-font-size-xxs);
   color: var(--pet-color-text-faint);
-}
-.cex__import-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--pet-space-sm);
-  margin-top: var(--pet-space-sm);
 }
 .cex__csslabel {
   display: block;

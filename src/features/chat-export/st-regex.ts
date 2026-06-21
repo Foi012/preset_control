@@ -28,7 +28,7 @@ export interface StRegexScript {
   runOnEdit?: boolean;
 }
 
-export type RegexScope = 'global' | 'character' | 'chat' | 'preset';
+export type RegexScope = 'global' | 'character' | 'preset';
 
 export interface StRegexGroup {
   scope: RegexScope;
@@ -39,7 +39,6 @@ export interface StRegexGroup {
 const SCOPE_LABEL: Record<RegexScope, string> = {
   global: '全局',
   character: '角色',
-  chat: '聊天',
   preset: '预设',
 };
 
@@ -59,14 +58,42 @@ function asScripts(v: unknown): StRegexScript[] {
   return Array.isArray(v) ? (v.filter(s => s && typeof s === 'object') as StRegexScript[]) : [];
 }
 
-type StCharacter = { data?: { extensions?: { regex_scripts?: unknown } } };
+type StExtensions = { extensions?: { regex_scripts?: unknown } };
+/** ST's PresetManager (typed `any` upstream) — the few accessors we probe, all optional. */
+type StPresetManager = {
+  getSelectedPresetName?: () => string;
+  getSelectedPreset?: () => unknown;
+  getCompletionPresetByName?: (name: string) => StExtensions | undefined;
+};
 type StContext = {
   extensionSettings?: { regex?: unknown };
-  characters?: StCharacter[];
+  characters?: StExtensions[];
   // ST's selected-character id — a numeric index, but sometimes a string ("0"); coerce.
   characterId?: number | string;
-  chatMetadata?: { regex_scripts?: unknown; regex?: unknown };
+  getPresetManager?: (apiId?: string) => StPresetManager | undefined;
 };
+
+/**
+ * Current completion preset's regex scripts (`preset.extensions.regex_scripts`). The
+ * PresetManager API is loosely typed upstream, so we probe a couple of accessor shapes
+ * defensively and swallow anything that throws — preset regex is best-effort like the rest.
+ */
+function presetScripts(ctx: StContext): StRegexScript[] {
+  try {
+    const pm = ctx.getPresetManager?.();
+    if (!pm) return [];
+    const name = pm.getSelectedPresetName?.();
+    let preset: StExtensions | undefined;
+    if (name && pm.getCompletionPresetByName) preset = pm.getCompletionPresetByName(name);
+    if (!preset) {
+      const sel = pm.getSelectedPreset?.();
+      if (sel && typeof sel === 'object') preset = sel as StExtensions;
+    }
+    return asScripts(preset?.extensions?.regex_scripts);
+  } catch {
+    return [];
+  }
+}
 
 function stContext(): StContext | null {
   const w = window as unknown as {
@@ -100,7 +127,6 @@ export function loadStRegexGroups(): StRegexGroup[] {
     cid != null && cid !== '' && Number.isFinite(Number(cid))
       ? asScripts(ctx.characters?.[Number(cid)]?.data?.extensions?.regex_scripts)
       : [];
-  // Chat-scoped scripts (newer ST) ride on chat metadata, if present.
-  const chat = asScripts(ctx.chatMetadata?.regex_scripts ?? ctx.chatMetadata?.regex);
-  return [group('global', global), group('character', char), group('chat', chat), group('preset', [])];
+  // Preset-scoped scripts live on the current completion preset.
+  return [group('global', global), group('character', char), group('preset', presetScripts(ctx))];
 }
