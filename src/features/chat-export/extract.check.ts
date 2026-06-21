@@ -2,7 +2,7 @@
  * Lightweight check for the two-bucket strip/extract engine.
  * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/extract.check.ts
  */
-import { parseRegex, asTagName, ruleError, stripExcludes, extractMessage } from './extract';
+import { parseRegex, asTagName, ruleError, stripExcludes, extractMessage, cleanUnclosedTags, applyReplacements } from './extract';
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -79,6 +79,32 @@ const comp = extractMessage('<think>略</think><正文>纯正文</正文>', 'ass
   include: ['正文'],
 });
 check('exclude before include', comp.body, '纯正文');
+
+// --- 未闭合标签 cleanup (opt-in, lossy) ------------------------------------
+const known = new Set(['think']);
+check('truncated open → drop tag to end', cleanUnclosedTags('keep<think>cut off', known), 'keep');
+check('truncated close → drop start through tag', cleanUnclosedTags('cut off</think>keep', known), 'keep');
+check('balanced span untouched', cleanUnclosedTags('a<think>b</think>c', known), 'a<think>b</think>c');
+check('unknown tag left alone', cleanUnclosedTags('keep<foo>tail', known), 'keep<foo>tail');
+check('empty names set → no-op', cleanUnclosedTags('x<think>y', new Set()), 'x<think>y');
+check(
+  'unclosed cleanup runs after balanced excludes in stripExcludes',
+  stripExcludes('<think>real</think>tail<think>truncated', {
+    strip: { reasoning: true, unclosed: true },
+    unclosedNames: ['think'],
+  }),
+  'tail',
+);
+
+// --- 查找替换 (imported ST regexes) ---------------------------------------
+check('slash+flags replace (删除dashes)', applyReplacements('一——二——三', [{ find: '/——/g', replace: '，' }]), '一，二，三');
+check('bare pattern deletes globally (删除accept)', applyReplacements('[Hugo ACCEPT] hi [Hugo ACCEPT]', [{ find: '\\[(?:Dramatron|Hugo) ACCEPT\\]', replace: '' }]), ' hi ');
+check('bare pattern forced global even without g', applyReplacements('a.a.a', [{ find: '\\.', replace: '-' }]), 'a-a-a');
+check('$1 group ref in replacement', applyReplacements('John Smith', [{ find: '/(\\w+) (\\w+)/', replace: '$2 $1' }]), 'Smith John');
+check('{{match}} macro → whole match', applyReplacements('hi', [{ find: '/hi/', replace: '[{{match}}]' }]), '[hi]');
+check('invalid pattern skipped, others apply', applyReplacements('x y', [{ find: '/[/', replace: 'Z' }, { find: '/y/', replace: 'Y' }]), 'x Y');
+check('empty find is a no-op', applyReplacements('keep', [{ find: '  ', replace: 'X' }]), 'keep');
+check('replace runs before strip in stripExcludes', stripExcludes('<think>a</think>——b', { replace: [{ find: '/——/g', replace: '·' }], strip: { reasoning: true } }), '·b');
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
 if (failures > 0) process.exit(1);
