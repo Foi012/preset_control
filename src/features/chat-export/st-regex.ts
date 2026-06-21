@@ -28,7 +28,7 @@ export interface StRegexScript {
   runOnEdit?: boolean;
 }
 
-export type RegexScope = 'global' | 'character' | 'preset';
+export type RegexScope = 'global' | 'character' | 'chat' | 'preset';
 
 export interface StRegexGroup {
   scope: RegexScope;
@@ -39,6 +39,7 @@ export interface StRegexGroup {
 const SCOPE_LABEL: Record<RegexScope, string> = {
   global: '全局',
   character: '角色',
+  chat: '聊天',
   preset: '预设',
 };
 
@@ -58,10 +59,13 @@ function asScripts(v: unknown): StRegexScript[] {
   return Array.isArray(v) ? (v.filter(s => s && typeof s === 'object') as StRegexScript[]) : [];
 }
 
+type StCharacter = { data?: { extensions?: { regex_scripts?: unknown } } };
 type StContext = {
   extensionSettings?: { regex?: unknown };
-  characters?: Array<{ data?: { extensions?: { regex_scripts?: unknown } } }>;
-  characterId?: number;
+  characters?: StCharacter[];
+  // ST's selected-character id — a numeric index, but sometimes a string ("0"); coerce.
+  characterId?: number | string;
+  chatMetadata?: { regex_scripts?: unknown; regex?: unknown };
 };
 
 function stContext(): StContext | null {
@@ -90,9 +94,13 @@ export function loadStRegexGroups(): StRegexGroup[] {
   if (!ctx) return [group('global', []), group('character', []), group('preset', [])];
 
   const global = asScripts(ctx.extensionSettings?.regex);
+  // Character-scoped scripts live on the selected card; characterId may be a string index.
+  const cid = ctx.characterId;
   const char =
-    typeof ctx.characterId === 'number'
-      ? asScripts(ctx.characters?.[ctx.characterId]?.data?.extensions?.regex_scripts)
+    cid != null && cid !== '' && Number.isFinite(Number(cid))
+      ? asScripts(ctx.characters?.[Number(cid)]?.data?.extensions?.regex_scripts)
       : [];
-  return [group('global', global), group('character', char), group('preset', [])];
+  // Chat-scoped scripts (newer ST) ride on chat metadata, if present.
+  const chat = asScripts(ctx.chatMetadata?.regex_scripts ?? ctx.chatMetadata?.regex);
+  return [group('global', global), group('character', char), group('chat', chat), group('preset', [])];
 }
