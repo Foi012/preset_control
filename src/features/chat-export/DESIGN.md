@@ -129,6 +129,13 @@
 >   ignores styling (plain text).
 > - **Dark-mode caveat.** Presets default to `font-weight`/`font-style` (theme-safe); hardcoded `color` can vanish in a
 >   reader's night theme, so colored styling is left to the advanced CSS field, not a default preset.
+> - **对话颜色 / dialogue color (2026-06-20).** An optional dialogue color, **independent** of the 加粗对话 bold preset
+>   (`StyleConfig.dialogueColor`): the `.st-dialogue` span-wrap fires when **either** bold or color is on (shared
+>   `DIALOGUE_RULE`, never double-added), and they emit separate declarations (`font-weight` vs `color`). Because an
+>   EPUB can't adapt a baked-in color to the reader's night mode, the swatches are a curated **dual-safe** set
+>   (`DIALOGUE_COLORS` — 黛蓝/松绿/赭红/酒红/绛紫, each ≥3:1 contrast on both white/sepia *and* dark, verified) rather
+>   than a free picker; 无 is the default and an exact hex still lives in 高级 CSS. `sanitizeColor` gates the emitted CSS
+>   to a `#rgb`/`#rrggbb` literal so a bad persisted value can't inject. UI: a swatch row under the preset list on ④.
 > - **Divider markers → `<hr>`.** A standalone paragraph that is only a divider marker (`---` / `***` / `- - -` /
 >   `* * *`) now renders as `<hr class="cex-divider">` (theme-safe CSS: `border-top` + `opacity`, so it follows the
 >   reader's text color in light/dark). This fixes the 角色分隔线 toggle, which previously emitted a literal `<p>---</p>`,
