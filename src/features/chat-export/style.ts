@@ -31,9 +31,36 @@ export interface StyleConfig {
   rules: StyleRule[];
   /** Advanced custom CSS, appended verbatim to the stylesheet. */
   css: string;
+  /**
+   * Optional dialogue color (a hex from {@link DIALOGUE_COLORS}). Independent of the
+   * `dialogue` bold preset — either, both, or neither may be on. Empty = no color.
+   */
+  dialogueColor?: string;
 }
 
-export const emptyStyleConfig = (): StyleConfig => ({ presets: [], rules: [], css: '' });
+export const emptyStyleConfig = (): StyleConfig => ({ presets: [], rules: [], css: '', dialogueColor: '' });
+
+/** The span-wrapping rule that marks paired-quote dialogue; shared by bold + color. */
+const DIALOGUE_PATTERN = '"[^"\\n]*"|“[^”\\n]*”|「[^」\\n]*」|『[^』\\n]*』|«[^»\\n]*»';
+const DIALOGUE_RULE: StyleRule = { pattern: DIALOGUE_PATTERN, className: 'st-dialogue' };
+
+/**
+ * Curated **dual-safe** dialogue colors — mid-tone so each keeps ≥3:1 contrast on both a
+ * light (white/sepia) and a dark reader background, sidestepping the EPUB's inability to
+ * adapt a baked-in color to the reader's night mode. Arbitrary hex stays in 高级 CSS.
+ */
+export const DIALOGUE_COLORS: { label: string; value: string }[] = [
+  { label: '黛蓝', value: '#5b7fa6' },
+  { label: '松绿', value: '#3f8e7e' },
+  { label: '赭红', value: '#bb6a4e' },
+  { label: '酒红', value: '#b05566' },
+  { label: '绛紫', value: '#9a5fa0' },
+];
+
+/** Accept only a `#rgb`/`#rrggbb` literal — guards the CSS we emit from a bad persisted value. */
+export function sanitizeColor(c: string | undefined): string {
+  return c && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(c.trim()) ? c.trim() : '';
+}
 
 /** A preset = a labelled toggle carrying inline rules, an optional block transform, and CSS. */
 export interface StylePreset {
@@ -66,8 +93,8 @@ export const STYLE_PRESETS: StylePreset[] = [
   {
     id: 'dialogue',
     label: '加粗对话',
-    hint: '把成对引号内的台词加粗（支持 " "、「」、“”、«»）。',
-    rules: [{ pattern: '"[^"\\n]*"|“[^”\\n]*”|「[^」\\n]*」|『[^』\\n]*』|«[^»\\n]*»', className: 'st-dialogue' }],
+    hint: '把成对引号内的台词加粗（支持 " "、「」、“”、«»）。可单独设置对话颜色。',
+    rules: [DIALOGUE_RULE],
     css: '.st-dialogue { font-weight: bold; }',
   },
   {
@@ -140,6 +167,9 @@ export function resolveStyleRules(style: StyleConfig): ResolvedRule[] {
     if (!style.presets.includes(preset.id)) continue;
     for (const rule of preset.rules ?? []) push(rule);
   }
+  // Dialogue color without the bold preset still needs the wrapping rule (the bold preset
+  // already adds it when enabled, so don't double-add).
+  if (sanitizeColor(style.dialogueColor) && !style.presets.includes('dialogue')) push(DIALOGUE_RULE);
   for (const rule of style.rules) push(rule);
   return out;
 }
@@ -155,6 +185,8 @@ export function buildStyleCss(style: StyleConfig): string {
   for (const preset of STYLE_PRESETS) {
     if (preset.css && style.presets.includes(preset.id)) parts.push(preset.css);
   }
+  const color = sanitizeColor(style.dialogueColor);
+  if (color) parts.push(`.st-dialogue { color: ${color}; }`);
   const custom = style.css.trim();
   if (custom) parts.push(custom);
   return parts.join('\n');

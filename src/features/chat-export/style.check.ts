@@ -2,7 +2,7 @@
  * Lightweight check for the typography engine + inline decoration.
  * Run: npx ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/style.check.ts
  */
-import { resolveStyleRules, buildStyleCss, sanitizeClassName, styleRenderOptions, emptyStyleConfig, type StyleConfig } from './style';
+import { resolveStyleRules, buildStyleCss, sanitizeClassName, sanitizeColor, styleRenderOptions, emptyStyleConfig, DIALOGUE_COLORS, type StyleConfig } from './style';
 import { bodyToParagraphs, decorateInline } from './render';
 
 let failures = 0;
@@ -75,6 +75,19 @@ check(
   '<p class="cex-lead">他说<span class="st-dialogue">&quot;嗨&quot;</span></p>\n<p>下一段</p>',
 );
 check('bodyToParagraphs with no rules unchanged', bodyToParagraphs('上\n下', []), '<p class="cex-lead">上<br/>下</p>');
+
+// --- dialogue color (independent of the bold preset) -----------------------
+const colorOnly: StyleConfig = { presets: [], rules: [], css: '', dialogueColor: '#5b7fa6' };
+check('color alone wraps dialogue (rule added without bold preset)', resolveStyleRules(colorOnly).length, 1);
+check('color alone emits color css, no bold', buildStyleCss(colorOnly), '.st-dialogue { color: #5b7fa6; }');
+const both: StyleConfig = { presets: ['dialogue'], rules: [], css: '', dialogueColor: '#b05566' };
+check('bold + color: rule not double-added', resolveStyleRules(both).length, 1);
+check('bold + color emits both declarations', buildStyleCss(both), '.st-dialogue { font-weight: bold; }\n.st-dialogue { color: #b05566; }');
+check('bold alone emits only bold', buildStyleCss({ presets: ['dialogue'], rules: [], css: '' }), '.st-dialogue { font-weight: bold; }');
+check('bad color is dropped (no css)', buildStyleCss({ presets: [], rules: [], css: '', dialogueColor: 'red); }body{x' }), '');
+check('sanitizeColor accepts #rrggbb', sanitizeColor('#5b7fa6'), '#5b7fa6');
+check('sanitizeColor rejects junk', sanitizeColor('javascript:1'), '');
+check('all swatches are valid colors', DIALOGUE_COLORS.every(c => sanitizeColor(c.value) === c.value), true);
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
 if (failures > 0) process.exit(1);

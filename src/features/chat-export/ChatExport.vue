@@ -27,7 +27,7 @@ import { buildChapters, type ChapterRule } from './chapters';
 import { chaptersToTxt } from './txt';
 import { buildEpub } from './epub';
 import { BOOK_CSS, bodyToParagraphs, escapeXml, metaLine, type BookMeta } from './render';
-import { STYLE_PRESETS, buildStyleCss, resolveStyleRules, styleRenderOptions, type StyleConfig, type StyleRule } from './style';
+import { STYLE_PRESETS, DIALOGUE_COLORS, buildStyleCss, resolveStyleRules, styleRenderOptions, type StyleConfig, type StyleRule } from './style';
 
 const messages = ref<NormMessage[]>([]);
 const sourceLabel = ref('');
@@ -472,12 +472,19 @@ const styleRules = ref<StyleRule[]>([]);
 const stylePatternDraft = ref('');
 const styleClassDraft = ref('');
 const styleCss = ref('');
+const dialogueColor = ref(''); // '' = none; otherwise a hex from DIALOGUE_COLORS
 const styleConfig = computed<StyleConfig>(() => ({
   presets: stylePresets.value,
   rules: styleRules.value,
   css: styleCss.value,
+  dialogueColor: dialogueColor.value,
 }));
 const stylePatternError = computed(() => ruleError(stylePatternDraft.value));
+
+// Toggle a dialogue swatch — clicking the active one clears it back to 无.
+function pickDialogueColor(value: string): void {
+  dialogueColor.value = dialogueColor.value === value ? '' : value;
+}
 
 function togglePreset(id: string): void {
   const i = stylePresets.value.indexOf(id);
@@ -694,6 +701,7 @@ function saveRules(): void {
         stylePresets: stylePresets.value,
         styleRules: styleRules.value,
         styleCss: styleCss.value,
+        dialogueColor: dialogueColor.value,
       }),
     );
   } catch {
@@ -732,6 +740,7 @@ function loadRules(): void {
         .filter((x: unknown): x is StyleRule => !!x && typeof (x as StyleRule).pattern === 'string' && typeof (x as StyleRule).className === 'string')
         .map((x: StyleRule) => ({ pattern: x.pattern, className: x.className }));
     if (typeof d.styleCss === 'string') styleCss.value = d.styleCss;
+    if (typeof d.dialogueColor === 'string') dialogueColor.value = d.dialogueColor;
   } catch {
     /* ignore malformed */
   }
@@ -739,7 +748,7 @@ function loadRules(): void {
 onMounted(loadRules);
 onUnmounted(revokeCoverPreview);
 watch(
-  [stripReasoning, stripOOC, stripComments, stripUnclosed, replaceRules, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss],
+  [stripReasoning, stripOOC, stripComments, stripUnclosed, replaceRules, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss, dialogueColor],
   saveRules,
   { deep: true },
 );
@@ -1248,6 +1257,31 @@ async function onDrop(event: DragEvent): Promise<void> {
             <p class="cex__stylehint">{{ p.hint }}</p>
           </li>
         </ul>
+
+        <!-- Dialogue color — independent of 加粗对话; swatches are dual-safe (legible in
+             light & dark readers). 无 clears it; an exact hex still lives in 高级 CSS. -->
+        <div class="cex__dlgcolor">
+          <span class="cex__dlgcolor-label">对话颜色</span>
+          <div class="cex__swatches">
+            <button
+              type="button"
+              class="cex__swatch cex__swatch--none"
+              :class="{ 'cex__swatch--on': !dialogueColor }"
+              title="无"
+              @click="dialogueColor = ''"
+            ><i class="cex__swatch-none-mark" /></button>
+            <button
+              v-for="c in DIALOGUE_COLORS"
+              :key="c.value"
+              type="button"
+              class="cex__swatch"
+              :class="{ 'cex__swatch--on': dialogueColor === c.value }"
+              :style="{ background: c.value }"
+              :title="c.label"
+              @click="pickDialogueColor(c.value)"
+            />
+          </div>
+        </div>
 
         <Section title="高级：自定义规则与 CSS" size="sm" :default-open="false">
           <p class="cex__hint">「匹配」填标签名或 <code>/正则/修饰符</code>；命中文本会套上你填的类名，再由下方 CSS 控制外观。</p>
@@ -2103,6 +2137,47 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-size: var(--pet-font-size-xs);
   line-height: var(--pet-font-leading-normal);
   color: var(--pet-color-text-faint);
+}
+/* Dialogue color swatch row. */
+.cex__dlgcolor {
+  display: flex;
+  align-items: center;
+  gap: var(--pet-space-sm);
+  margin-top: var(--pet-space-md);
+}
+.cex__dlgcolor-label {
+  font-size: var(--pet-font-size-sm);
+  color: var(--pet-color-text);
+}
+.cex__swatches {
+  display: flex;
+  gap: var(--pet-space-xs);
+}
+.cex__swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--pet-radius-pill);
+  border: 1px solid var(--pet-color-border-strong);
+  cursor: pointer;
+  position: relative;
+}
+/* Selected ring — offset so it reads against any swatch fill. */
+.cex__swatch--on {
+  box-shadow: 0 0 0 2px var(--pet-color-bg, #fff), 0 0 0 4px var(--pet-color-accent);
+}
+.cex__swatch--none {
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* 无 swatch — a diagonal slash to read as "no color". */
+.cex__swatch-none-mark {
+  width: 18px;
+  height: 1px;
+  background: var(--pet-color-text-faint);
+  transform: rotate(-45deg);
 }
 /* Advanced: two-field custom rule row (匹配 + 类名). Pattern grows, class is fixed-ish. */
 .cex__stylerule :deep(.pet-field) {
