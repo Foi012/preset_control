@@ -20,8 +20,9 @@ import RuleField from './RuleField.vue';
 import SelectMark from '@/ui/SelectMark.vue';
 import { loadRawMessages } from './chat-source';
 import { normalizeMessages, type NormMessage, type RawMessage } from './normalize';
-import { extractMessage, ruleError, asTagName, type ExtractConfig } from './extract';
+import { extractMessage, ruleError, asTagName, parseRegex, type ExtractConfig, type ReplaceRule } from './extract';
 import { scanTags, scanUnclosed } from './scan';
+import { loadStRegexGroups, toReplaceRule, previewRule, type StRegexGroup } from './st-regex';
 import { buildChapters, type ChapterRule } from './chapters';
 import { chaptersToTxt } from './txt';
 import { buildEpub } from './epub';
@@ -128,7 +129,60 @@ const knownTagNames = computed(() => {
 const unclosedTags = computed(() => scanUnclosed(messages.value.map(m => m.content), knownTagNames.value));
 const unclosedCount = computed(() => unclosedTags.value.reduce((n, u) => n + u.opens + u.closes, 0));
 
+// 查找替换 — find→replace rules (manual, or imported from ST's regex scripts). Applied
+// first, before strip/extract. ST display/prompt regexes aren't in the stored message, so
+// re-running them here is the only way to reflect them in the export (see st-regex.ts).
+const replaceRules = ref<ReplaceRule[]>([]);
+const replaceFindDraft = ref('');
+const replaceReplDraft = ref('');
+const replaceFindError = computed(() => parseRegex(replaceFindDraft.value).error);
+
+function addReplaceRule(): void {
+  const find = replaceFindDraft.value.trim();
+  if (!find || replaceFindError.value) return;
+  replaceRules.value.push({ find, replace: replaceReplDraft.value });
+  replaceFindDraft.value = '';
+  replaceReplDraft.value = '';
+}
+function removeReplaceRule(i: number): void {
+  replaceRules.value.splice(i, 1);
+}
+
+// ST regex import — a collapsible picker over the chat's available regex scripts.
+const showRegexImport = ref(false);
+const regexGroups = ref<StRegexGroup[]>([]);
+const selectedImports = ref<Set<string>>(new Set()); // keys = `${scope}:${index}`
+const importableGroups = computed(() => regexGroups.value.filter(g => g.scripts.length));
+
+function openRegexImport(): void {
+  regexGroups.value = loadStRegexGroups();
+  selectedImports.value = new Set();
+  // Pre-check the enabled scripts only — disabled ones are off in ST for a reason.
+  for (const g of regexGroups.value) {
+    g.scripts.forEach((s, i) => {
+      if (!s.disabled) selectedImports.value.add(`${g.scope}:${i}`);
+    });
+  }
+  showRegexImport.value = true;
+}
+function toggleImport(key: string): void {
+  const next = new Set(selectedImports.value);
+  next.has(key) ? next.delete(key) : next.add(key);
+  selectedImports.value = next;
+}
+function confirmRegexImport(): void {
+  for (const g of regexGroups.value) {
+    g.scripts.forEach((s, i) => {
+      if (!selectedImports.value.has(`${g.scope}:${i}`)) return;
+      const rule = toReplaceRule(s);
+      if (rule.find.trim()) replaceRules.value.push(rule);
+    });
+  }
+  showRegexImport.value = false;
+}
+
 const config = computed<ExtractConfig>(() => ({
+  replace: replaceRules.value,
   strip: { reasoning: stripReasoning.value, ooc: stripOOC.value, comments: stripComments.value, unclosed: stripUnclosed.value },
   unclosedNames: [...knownTagNames.value],
   exclude: excludeRules.value,
@@ -183,6 +237,7 @@ function removeTitle(i: number): void {
 const showScan = ref(true);
 const showInclude = ref(false);
 const showExclude = ref(false);
+const showReplace = ref(false);
 const scannedTags = computed(() => (showScan.value ? scanTags(messages.value.map(m => m.content)) : []));
 
 // A scanned tag is routed to at most ONE bucket — 不处理 / 排除 / 正文 — so a tag can
@@ -597,6 +652,7 @@ function saveRules(): void {
         stripOOC: stripOOC.value,
         stripComments: stripComments.value,
         stripUnclosed: stripUnclosed.value,
+        replace: replaceRules.value,
         exclude: excludeRules.value,
         include: includeRules.value,
         title: titleRules.value,
@@ -624,6 +680,10 @@ function loadRules(): void {
     if (typeof d.stripOOC === 'boolean') stripOOC.value = d.stripOOC;
     if (typeof d.stripComments === 'boolean') stripComments.value = d.stripComments;
     if (typeof d.stripUnclosed === 'boolean') stripUnclosed.value = d.stripUnclosed;
+    if (Array.isArray(d.replace))
+      replaceRules.value = d.replace
+        .filter((x: unknown): x is ReplaceRule => !!x && typeof (x as ReplaceRule).find === 'string' && typeof (x as ReplaceRule).replace === 'string')
+        .map((x: ReplaceRule) => ({ find: x.find, replace: x.replace }));
     if (Array.isArray(d.exclude)) excludeRules.value = d.exclude.filter((x: unknown) => typeof x === 'string');
     if (Array.isArray(d.include)) includeRules.value = d.include.filter((x: unknown) => typeof x === 'string');
     if (Array.isArray(d.title)) titleRules.value = d.title.filter((x: unknown) => typeof x === 'string');
@@ -646,7 +706,7 @@ function loadRules(): void {
 onMounted(loadRules);
 onUnmounted(revokeCoverPreview);
 watch(
-  [stripReasoning, stripOOC, stripComments, stripUnclosed, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss],
+  [stripReasoning, stripOOC, stripComments, stripUnclosed, replaceRules, excludeRules, includeRules, titleRules, insertRoleDivider, limitRange, rangeStart, rangeEnd, chapterRuleKind, everyN, stylePresets, styleRules, styleCss],
   saveRules,
   { deep: true },
 );
@@ -926,6 +986,54 @@ async function onDrop(event: DragEvent): Promise<void> {
           @add="addExclude"
           @remove="removeExclude"
         />
+      </Section>
+
+      <!-- REPLACE — find→replace cleanup; import existing ST regexes or add manually. -->
+      <Section v-model:open="showReplace" title="查找替换" :default-open="false" size="sm">
+        <p class="cex__desc">把匹配到的文本替换成另一段（留空即删除）。可直接导入 ST 现有正则。</p>
+        <div class="cex-rule">
+          <Button variant="secondary" size="sm" icon="download" @click="openRegexImport">导入 ST 正则</Button>
+
+          <!-- Inline import picker: list ST's regex scripts grouped by scope, pick + 导入. -->
+          <div v-if="showRegexImport" class="cex__import">
+            <p v-if="!importableGroups.length" class="cex__hint">未找到可导入的 ST 正则（全局 / 角色 / 预设均为空）。</p>
+            <template v-else>
+              <div v-for="g in importableGroups" :key="g.scope" class="cex__import-group">
+                <div class="cex__import-scope">{{ g.label }}</div>
+                <button
+                  v-for="(s, i) in g.scripts"
+                  :key="i"
+                  type="button"
+                  class="cex__import-row"
+                  @click="toggleImport(`${g.scope}:${i}`)"
+                >
+                  <SelectMark type="checkbox" :state="selectedImports.has(`${g.scope}:${i}`) ? 'on' : 'off'" size="sm" />
+                  <span class="cex__import-info">
+                    <span class="cex__import-name">{{ s.scriptName || '未命名' }}<span v-if="s.disabled" class="cex__import-off"> · 已停用</span></span>
+                    <code class="cex__import-rule">{{ previewRule(s) }}</code>
+                  </span>
+                </button>
+              </div>
+            </template>
+            <div class="cex__import-actions">
+              <Button variant="ghost" size="sm" @click="showRegexImport = false">取消</Button>
+              <Button variant="primary" size="sm" :disabled="!selectedImports.size" @click="confirmRegexImport">导入所选 ({{ selectedImports.size }})</Button>
+            </div>
+          </div>
+
+          <div class="cex-rule__row cex__stylerule">
+            <TextField v-model="replaceFindDraft" mono :invalid="!!replaceFindError" spellcheck="false" placeholder="查找，如 /——/g" @keyup.enter="addReplaceRule" />
+            <TextField v-model="replaceReplDraft" mono spellcheck="false" placeholder="替换为（留空 = 删除）" class="cex__styleclass" @keyup.enter="addReplaceRule" />
+            <Button variant="secondary" size="sm" :disabled="!replaceFindDraft.trim() || !!replaceFindError" @click="addReplaceRule">添加</Button>
+          </div>
+          <p v-if="replaceFindError" class="cex-rule__error">正则错误：{{ replaceFindError }}</p>
+          <div v-if="replaceRules.length" class="cex-rule__chips">
+            <span v-for="(r, i) in replaceRules" :key="i" class="cex-rule__chip">
+              <code>{{ r.find }}</code> → <code>{{ r.replace || '〔删除〕' }}</code>
+              <IconButton name="close" title="移除" danger class="cex-rule__chip-x" @click="removeReplaceRule(i)" />
+            </span>
+          </div>
+        </div>
       </Section>
     </section>
 
@@ -1948,6 +2056,63 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .cex__styleclass {
   flex: 0 1 8em;
+}
+/* ST regex import picker — inline list of scripts grouped by scope. */
+.cex__import {
+  margin: var(--pet-space-sm) 0;
+  padding: var(--pet-space-sm);
+  border: 1px solid var(--pet-color-border);
+  border-radius: var(--pet-radius-sm);
+  background: var(--pet-color-surface-sunken, transparent);
+}
+.cex__import-group + .cex__import-group {
+  margin-top: var(--pet-space-sm);
+}
+.cex__import-scope {
+  font-size: var(--pet-font-size-xxs);
+  color: var(--pet-color-text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--pet-space-xs);
+}
+.cex__import-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pet-space-sm);
+  width: 100%;
+  padding: var(--pet-space-xs) 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.cex__import-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cex__import-name {
+  font-size: var(--pet-font-size-sm);
+  color: var(--pet-color-text);
+}
+.cex__import-off {
+  color: var(--pet-color-text-faint);
+}
+.cex__import-rule {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--pet-font-mono);
+  font-size: var(--pet-font-size-xxs);
+  color: var(--pet-color-text-faint);
+}
+.cex__import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--pet-space-sm);
+  margin-top: var(--pet-space-sm);
 }
 .cex__csslabel {
   display: block;

@@ -73,6 +73,19 @@
 >   tags** (`unclosedNames` = chat's balanced tags ∪ think presets ∪ 排除 rule tags) so a stray `<` in prose is never
 >   mistaken for a tag. Runs **last** in `stripExcludes`, after balanced spans are already gone. Opt-in + a live count
 >   keeps the data loss honest (the preview confirms before export).
+> - **查找替换 + ST 正则导入 (2026-06-20).** A new **查找替换** `Section` on ② holds find→replace rules (`ReplaceRule
+>   { find, replace }`), applied **first** in `stripExcludes` (before any strip/extract). Why a real engine rather than
+>   "read the cleaned chat": ST regexes are mostly **display-only** (`markdownOnly`) or **prompt-only** (`promptOnly`),
+>   which are *not* baked into the stored `chat[i].mes` we read — so the only way to reflect them is to re-run them.
+>   `applyReplacements` (pure) forces a global flag (ST replaces every occurrence) and maps ST's `{{match}}` macro to
+>   JS `$&`; invalid patterns are skipped. **Import** (`st-regex.ts`, pure mapping + one impure context read mirroring
+>   `chat-source.ts`): `loadStRegexGroups` reads `getContext().extensionSettings.regex` (全局) and the card's
+>   `data.extensions.regex_scripts` (角色); 预设 is surfaced as a scope but stays empty (not a core ST concept — shown,
+>   not faked). The inline picker lists scripts grouped by scope with a `find → replace` preview, **pre-checks enabled
+>   ones** (disabled scripts are off in ST for a reason), and `toReplaceRule` maps `findRegex`/`replaceString` →
+>   `{ find, replace }`. Manual authoring reuses the 高级 two-field add-row shape (查找 / 替换 + chips). Placement
+>   (user vs AI output) is **ignored** — imports apply to every message; deselect on import if unwanted. Persisted in
+>   `cexRules.replace`. (Deferred from the first cut, now in: the manual 查找→替换 row ships alongside import.)
 > - **Rule scope.** 排除 applies to **every** message; 正文/标题 apply to **assistant** turns only (`extractMessage`).
 >   Body tags (`正文`/`body`/`content`/`text`) and unnamed matches become the chapter **body**; other tags / named
 >   regex groups (e.g. `(?<title>…)`) become labelled **fields** (chapter metadata like title).
@@ -172,6 +185,8 @@ extract.ts          — strip toggles + named-group regex → mapped fields; reg
 chapters.ts         — chapter-trigger split → Chapter { title, meta, html }      (pure)
 epub.ts             — Chapter[] + BookMeta → Blob (JSZip)        ;  txt.ts — Chapter[] → string
 style.ts            — typography model: StyleConfig, STYLE_PRESETS, resolveStyleRules, buildStyleCss (pure)
+st-regex.ts         — import ST regex scripts → ReplaceRule[]: pure mapping (toReplaceRule) + one
+                      impure getContext() read (loadStRegexGroups), grouped 全局/角色/预设
 store.ts            — Pinia store for export config + derived preview (per-card localStorage)
 ChatExport.vue      — the tool root (source → config → preview → export), mounted by the shell
 components/         — source picker, regex/mapping form, preview pane, export bar
