@@ -14,7 +14,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useConnectionStore } from './store';
 import { paramDef, type ParamId } from './params';
 import type { ExtraParams, ResolvedFavorite } from './favorites';
-import ChipButton from '@/ui/ChipButton.vue';
+import Dropdown, { type DropdownOption } from '@/ui/Dropdown.vue';
 import IconButton from '@/ui/IconButton.vue';
 import Section from '@/ui/Section.vue';
 import TextField from '@/ui/TextField.vue';
@@ -35,11 +35,18 @@ const EXTRA_FIELDS: { key: keyof ExtraParams; label: string }[] = [
 
 const matches = (text: string, q: string): boolean => text.toLowerCase().includes(q.trim().toLowerCase());
 
-/** Saved variants (filtered by search) — the chips and the 已保存 list. */
+/** Saved variants (filtered by search) — the 档案 dropdown and the 已保存 list. */
 const savedList = computed(() => cp.resolved.filter(f => matches(`${f.label} ${f.name}`, cp.search)));
-const liveChips = computed(() => savedList.value.filter(f => !f.missing));
+/** 档案 dropdown options — every applicable saved rig (missing ones can't switch). */
+const rigOptions = computed<DropdownOption[]>(() =>
+  cp.resolved.filter(f => !f.missing).map(f => ({ value: f.id, label: f.model ? `${f.label} · ${f.model}` : f.label })));
 /** ST profiles with no variant yet (filtered) — only shown when the eye is off. */
 const unsavedList = computed(() => (cp.savedOnly ? [] : cp.unsaved.filter(p => matches(p.name, cp.search))));
+
+/** Add a rig and jump straight into its editor (edit-on-add — no empty-then-hunt). */
+function addRig(profileId: string): void {
+  editId.value = cp.createVariant(profileId);
+}
 
 function paramValue(fav: ResolvedFavorite, id: ParamId): string {
   const v = fav.params?.[id]?.value;
@@ -60,27 +67,23 @@ function onExtra(id: string, key: keyof ExtraParams, e: Event): void {
 }
 const hasOverlay = (fav: ResolvedFavorite): boolean =>
   (!!fav.params && Object.keys(fav.params).length > 0) || (!!fav.extra && Object.keys(fav.extra).length > 0);
-const isActive = (fav: ResolvedFavorite): boolean => fav.profileId === cp.currentId;
 
 onMounted(() => cp.refresh());
 </script>
 
 <template>
   <div class="cp">
-    <!-- Row 1 — 档案 chips: tap to switch the whole rig. -->
+    <!-- Row 1 — 档案 dropdown: pick a rig to switch the whole connection. -->
     <div class="cp__bar">
       <span class="cp__barlabel">档案</span>
-      <div v-if="liveChips.length" class="cp__chips">
-        <ChipButton
-          v-for="fav in liveChips" :key="fav.id"
-          :active="isActive(fav)"
-          :title="`${fav.name}${fav.preset ? ' · ' + fav.preset : ''}`"
-          @click="cp.apply(fav.id)"
-        >
-          <span class="cp__chiplabel">{{ fav.label }}</span>
-          <small v-if="fav.model" class="cp__chipmodel">{{ fav.model }}</small>
-        </ChipButton>
-      </div>
+      <Dropdown
+        v-if="rigOptions.length"
+        class="cp__rig"
+        :model-value="cp.appliedId ?? ''"
+        :options="rigOptions"
+        placeholder="选择并切换连接档案"
+        @update:model-value="cp.apply($event)"
+      />
       <span v-else class="cp__empty">还没有保存的档案 —— 在下面添加</span>
     </div>
 
@@ -96,7 +99,7 @@ onMounted(() => cp.refresh());
     <!-- 已保存 — edit / capture / duplicate / remove variants. -->
     <Section title="已保存" size="sm" :default-open="true">
       <ul v-if="savedList.length" class="cp__list">
-        <li v-for="(fav, i) in savedList" :key="fav.id" class="cp__row" :class="{ 'cp__row--missing': fav.missing }">
+        <li v-for="fav in savedList" :key="fav.id" class="cp__row" :class="{ 'cp__row--missing': fav.missing }">
           <div class="cp__rowtop">
             <TextField :model-value="fav.label" :placeholder="fav.name || '已删除'" compact
               @update:model-value="cp.relabel(fav.id, String($event))" />
@@ -106,8 +109,6 @@ onMounted(() => cp.refresh());
               <IconButton v-if="!fav.missing" name="sliders" title="参数覆盖" :active="editId === fav.id || hasOverlay(fav)"
                 @click="editId = editId === fav.id ? null : fav.id" />
               <IconButton name="add" title="复制为新变体" @click="cp.duplicate(fav.id)" />
-              <IconButton name="chevron-up" title="上移" :disabled="i === 0" @click="cp.move(fav.id, -1)" />
-              <IconButton name="chevron-down" title="下移" :disabled="i === savedList.length - 1" @click="cp.move(fav.id, 1)" />
               <IconButton name="trash" title="移除" danger @click="cp.remove(fav.id)" />
             </div>
           </div>
@@ -142,7 +143,7 @@ onMounted(() => cp.refresh());
         <li v-for="p in unsavedList" :key="p.id" class="cp__addrow">
           <span class="cp__addname" :title="p.name">{{ p.name }}</span>
           <span v-if="p.model" class="cp__meta">{{ p.model }}</span>
-          <IconButton name="add" title="保存为档案" @click="cp.createVariant(p.id)" />
+          <IconButton name="add" title="保存为档案" @click="addRig(p.id)" />
         </li>
       </ul>
       <p v-else class="cp__empty">没有更多可添加的连接配置（或 ST 不可用）。</p>
@@ -173,24 +174,9 @@ onMounted(() => cp.refresh());
   font-weight: var(--pet-font-weight-semibold);
   color: var(--pet-color-text-muted);
 }
-.cp__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--pet-space-xs);
+.cp__rig {
+  flex: 1;
   min-width: 0;
-}
-.cp__chiplabel {
-  display: block;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cp__chipmodel {
-  display: block;
-  font-size: var(--pet-font-size-xxs);
-  font-weight: var(--pet-font-weight-normal);
-  opacity: 0.7;
 }
 /* Row 2 — search + tools. */
 .cp__tools {

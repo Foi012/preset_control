@@ -61,6 +61,8 @@ export const useConnectionStore = defineStore('cp-connection', () => {
   const favorites = ref<Favorite[]>(readFavorites());
   const profiles = ref(listProfiles());
   const currentId = ref<string | null>(selectedProfileId());
+  /** The specific variant last applied this session — drives the 档案 dropdown selection. */
+  const appliedId = ref<string | null>(null);
   const applyingId = ref<string | null>(null);
   const error = ref<string | null>(null);
   /** Management filters (mirror the console's in-use bar): a search box + a saved-only eye toggle. */
@@ -82,7 +84,12 @@ export const useConnectionStore = defineStore('cp-connection', () => {
     favorites.value = next;
     writeFavorites(next);
   }
-  const createVariant = (profileId: string): void => commit(createFavorite(favorites.value, profileId, genId()));
+  /** Create a variant and return its id (so the UI can open its editor immediately — edit-on-add). */
+  function createVariant(profileId: string): string {
+    const id = genId();
+    commit(createFavorite(favorites.value, profileId, id));
+    return id;
+  }
   const duplicate = (id: string): void => commit(duplicateFavorite(favorites.value, id, genId()));
   const remove = (id: string): void => commit(removeFavorite(favorites.value, id));
   const relabel = (id: string, label: string): void => commit(updateFavorite(favorites.value, id, { label }));
@@ -115,17 +122,25 @@ export const useConnectionStore = defineStore('cp-connection', () => {
         error.value = '切换失败：无法连接 SillyTavern。';
         return;
       }
+      appliedId.value = id;
+      currentId.value = selectedProfileId();
+
       const { settings } = resolveParamApply({ profileId: target.profileId, params: target.params });
       const extra: ExtraParams = target.extra ?? {};
-      if (Object.keys(settings).length || Object.keys(extra).length) writeOverlay(settings, extra);
-      currentId.value = selectedProfileId();
+      if (Object.keys(settings).length || Object.keys(extra).length) {
+        // Apply the overlay now AND again after the profile's trailing chat-reload settles —
+        // /profile fires an async reload that re-applies the preset's params and would otherwise
+        // clobber our values (the "temp didn't change" report). The second write wins the race.
+        writeOverlay(settings, extra);
+        setTimeout(() => writeOverlay(settings, extra), 500);
+      }
     } finally {
       applyingId.value = null;
     }
   }
 
   return {
-    favorites, profiles, currentId, applyingId, error, search, savedOnly,
+    favorites, profiles, currentId, appliedId, applyingId, error, search, savedOnly,
     resolved, unsaved,
     refresh, createVariant, duplicate, remove, relabel, bindSnapshot, setParam, setExtra, capture, move, apply,
   };
