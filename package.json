@@ -17,7 +17,9 @@
     "check:chat-chapters": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/chapters.check.ts",
     "check:chat-render": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/render.check.ts",
     "check:chat-style": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/style.check.ts",
-    "check:chat-epub": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/epub.check.ts"
+    "check:chat-epub": "ts-node --transpile-only -P tsconfig.check.json src/features/chat-export/epub.check.ts",
+    "check:conn-policy": "ts-node --transpile-only -P tsconfig.check.json src/features/connection-profiles/policy.check.ts",
+    "check:conn-favorites": "ts-node --transpile-only -P tsconfig.check.json src/features/connection-profiles/favorites.check.ts"
   },
   "browserslist": [
     "defaults and partially supports es6-module"

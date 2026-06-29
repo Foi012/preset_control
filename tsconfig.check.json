@@ -9,6 +9,7 @@
   "include": [
     "src/features/preset-console/**/*.ts",
     "src/features/preset-console/**/*.json",
-    "src/features/chat-export/**/*.ts"
+    "src/features/chat-export/**/*.ts",
+    "src/features/connection-profiles/**/*.ts"
   ]
 }

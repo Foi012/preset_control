@@ -12,6 +12,7 @@ const ui = useUiStore();
 type ToolCard = { id: ToolId; icon: IconName; title: string; desc: string };
 const TOOLS: ToolCard[] = [
   { id: 'preset', icon: 'sliders', title: '预设控制台', desc: '切换与编排预设条目' },
+  { id: 'connection', icon: 'power', title: '连接档案', desc: '一键切换端点 · 模型 · 预设' },
   { id: 'export', icon: 'download', title: '聊天导出 · EPUB', desc: '把聊天记录导出为电子书' },
 ];
 </script>
