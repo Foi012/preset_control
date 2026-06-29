@@ -1,19 +1,19 @@
 <script setup lang="ts">
 /**
- * 连接档案 — the curated rig quick-switcher.
+ * 连接档案 — curated rig quick-switcher (console-style layout).
  *
- * A short row of one-tap chips (the user's pinned 2–3 writing rigs) sits on top: tapping one
- * runs `/profile <name>`, which makes ST swap url+key+model+preset in one go — the fast path
- * for A/B-comparing GPT vs Claude. A collapsible 管理档案 section below pins/removes/reorders
- * rigs from ST's full profile list and gives each a short label (ST's own names are long).
+ * Row 1 (档案): one-tap chips for saved rig variants — tapping runs `/profile <name>` then
+ * re-applies the variant's param + 附加参数 overlay (the bits ST drops). Row 2: a search box + an
+ * eye toggle (on = saved only, off = also show ST profiles you haven't saved). Below, two
+ * accordions: 已保存 (edit/capture/duplicate/remove variants) and 未保存 (ST profiles → add a rig).
  *
- * This tool only *references* ST's profiles — it never holds the endpoint, key, or model. See
- * DESIGN.md for the "orchestrate ST, don't rebuild it" decision.
+ * One ST profile can back several variants (Claude热 / Claude冷) — duplicate a saved rig and
+ * recapture. The tool only references ST's profiles; it never holds the endpoint, key, or model.
  */
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useConnectionStore } from './store';
 import { paramDef, type ParamId } from './params';
-import type { ResolvedFavorite } from './favorites';
+import type { ExtraParams, ResolvedFavorite } from './favorites';
 import ChipButton from '@/ui/ChipButton.vue';
 import IconButton from '@/ui/IconButton.vue';
 import Section from '@/ui/Section.vue';
@@ -22,98 +22,130 @@ import PetIcon from '@/ui/PetIcon.vue';
 
 const cp = useConnectionStore();
 
-/** Which favorite's param panel is expanded (one at a time). */
-const paramOpen = ref<string | null>(null);
+/** Which variant's editor is expanded (one at a time). */
+const editId = ref<string | null>(null);
 
-/** The sampling params surfaced per rig — the common ones; the rest can come later behind 高级. */
 const COMMON_PARAMS: ParamId[] = ['temp_openai', 'top_p_openai', 'freq_pen_openai', 'pres_pen_openai', 'openai_max_tokens'];
 const commonDefs = COMMON_PARAMS.map(id => paramDef(id)!).filter(Boolean);
+const EXTRA_FIELDS: { key: keyof ExtraParams; label: string }[] = [
+  { key: 'includeBody', label: '包含主体参数' },
+  { key: 'excludeBody', label: '排除主体参数' },
+  { key: 'headers', label: '包含请求标头' },
+];
 
-/** Display string for a param override input — empty when there's no override (rig default). */
+const matches = (text: string, q: string): boolean => text.toLowerCase().includes(q.trim().toLowerCase());
+
+/** Saved variants (filtered by search) — the chips and the 已保存 list. */
+const savedList = computed(() => cp.resolved.filter(f => matches(`${f.label} ${f.name}`, cp.search)));
+const liveChips = computed(() => savedList.value.filter(f => !f.missing));
+/** ST profiles with no variant yet (filtered) — only shown when the eye is off. */
+const unsavedList = computed(() => (cp.savedOnly ? [] : cp.unsaved.filter(p => matches(p.name, cp.search))));
+
 function paramValue(fav: ResolvedFavorite, id: ParamId): string {
   const v = fav.params?.[id]?.value;
   return v === undefined ? '' : String(v);
 }
-
-/** Blank clears the override (back to default); a finite number stores it. */
-function onParam(profileId: string, id: ParamId, raw: string | number): void {
-  const text = String(raw).trim();
-  if (text === '') return cp.setParam(profileId, id, null);
-  const n = Number(text);
-  if (Number.isFinite(n)) cp.setParam(profileId, id, n);
+/** Commit on change (not每keystroke) so decimals like "1.1" type cleanly. Blank clears the override. */
+function onParam(id: string, paramId: ParamId, e: Event): void {
+  const raw = (e.target as HTMLInputElement).value.trim();
+  if (raw === '') return cp.setParam(id, paramId, null);
+  const n = Number(raw);
+  if (Number.isFinite(n)) cp.setParam(id, paramId, n);
 }
-
-const hasParams = (fav: ResolvedFavorite): boolean => !!fav.params && Object.keys(fav.params).length > 0;
+function extraValue(fav: ResolvedFavorite, key: keyof ExtraParams): string {
+  return fav.extra?.[key] ?? '';
+}
+function onExtra(id: string, key: keyof ExtraParams, e: Event): void {
+  cp.setExtra(id, key, (e.target as HTMLTextAreaElement).value);
+}
+const hasOverlay = (fav: ResolvedFavorite): boolean =>
+  (!!fav.params && Object.keys(fav.params).length > 0) || (!!fav.extra && Object.keys(fav.extra).length > 0);
+const isActive = (fav: ResolvedFavorite): boolean => fav.profileId === cp.currentId;
 
 onMounted(() => cp.refresh());
 </script>
 
 <template>
   <div class="cp">
-    <!-- Quick switch: one tap = apply the rig. Missing favorites live in 管理 below, not here. -->
-    <section class="cp__switch">
-      <p class="cp__lead">点按切换连接档案（端点 · 密钥 · 模型 · 预设一并切换）。</p>
-      <div v-if="cp.resolved.some(f => !f.missing)" class="cp__chips">
-        <template v-for="fav in cp.resolved" :key="fav.profileId">
-          <ChipButton
-            v-if="!fav.missing"
-            :active="fav.profileId === cp.currentId"
-            :title="`${fav.name}${fav.preset ? ' · ' + fav.preset : ''}`"
-            @click="cp.apply(fav.profileId)"
-          >
-            <span class="cp__chiplabel">{{ fav.label }}</span>
-            <small v-if="fav.model" class="cp__chipmodel">{{ fav.model }}</small>
-          </ChipButton>
-        </template>
+    <!-- Row 1 — 档案 chips: tap to switch the whole rig. -->
+    <div class="cp__bar">
+      <span class="cp__barlabel">档案</span>
+      <div v-if="liveChips.length" class="cp__chips">
+        <ChipButton
+          v-for="fav in liveChips" :key="fav.id"
+          :active="isActive(fav)"
+          :title="`${fav.name}${fav.preset ? ' · ' + fav.preset : ''}`"
+          @click="cp.apply(fav.id)"
+        >
+          <span class="cp__chiplabel">{{ fav.label }}</span>
+          <small v-if="fav.model" class="cp__chipmodel">{{ fav.model }}</small>
+        </ChipButton>
       </div>
-      <p v-else class="cp__empty">还没有收藏的连接档案。在下面从 ST 的连接配置里添加常用的。</p>
-      <p v-if="cp.error" class="cp__error"><PetIcon name="alert" />{{ cp.error }}</p>
-    </section>
+      <span v-else class="cp__empty">还没有保存的档案 —— 在下面添加</span>
+    </div>
 
-    <!-- Manage: pin/remove/reorder/relabel, and add from ST's full profile list. -->
-    <Section title="管理档案" :default-open="cp.resolved.length === 0" size="sm">
-      <ul v-if="cp.resolved.length" class="cp__list">
-        <li v-for="(fav, i) in cp.resolved" :key="fav.profileId" class="cp__row" :class="{ 'cp__row--missing': fav.missing }">
+    <!-- Row 2 — search + eye (saved-only) + refresh, mirroring the console's in-use bar. -->
+    <div class="cp__tools">
+      <TextField v-model="cp.search" placeholder="搜索档案" compact class="cp__search" />
+      <IconButton :name="cp.savedOnly ? 'eye' : 'eye-off'" :active="cp.savedOnly"
+        title="仅看已保存 / 显示全部连接配置" @click="cp.savedOnly = !cp.savedOnly" />
+      <IconButton name="refresh" title="刷新连接配置" @click="cp.refresh()" />
+    </div>
+    <p v-if="cp.error" class="cp__error"><PetIcon name="alert" />{{ cp.error }}</p>
+
+    <!-- 已保存 — edit / capture / duplicate / remove variants. -->
+    <Section title="已保存" size="sm" :default-open="true">
+      <ul v-if="savedList.length" class="cp__list">
+        <li v-for="(fav, i) in savedList" :key="fav.id" class="cp__row" :class="{ 'cp__row--missing': fav.missing }">
           <div class="cp__rowtop">
-            <div class="cp__rowmain">
-              <TextField
-                :model-value="fav.label"
-                :placeholder="fav.name || '已删除的档案'"
-                compact
-                @update:model-value="cp.relabel(fav.profileId, String($event))"
-              />
-              <span v-if="fav.missing" class="cp__tag">已删除</span>
-              <span v-else-if="fav.model" class="cp__meta">{{ fav.model }}<template v-if="fav.preset"> · {{ fav.preset }}</template></span>
-            </div>
+            <TextField :model-value="fav.label" :placeholder="fav.name || '已删除'" compact
+              @update:model-value="cp.relabel(fav.id, String($event))" />
+            <span v-if="fav.missing" class="cp__tag">已删除</span>
+            <span v-else class="cp__meta">{{ fav.model }}<template v-if="fav.preset"> · {{ fav.preset }}</template></span>
             <div class="cp__rowactions">
-              <IconButton v-if="!fav.missing" name="sliders" title="参数覆盖" :active="paramOpen === fav.profileId || hasParams(fav)"
-                @click="paramOpen = paramOpen === fav.profileId ? null : fav.profileId" />
-              <IconButton name="chevron-up" title="上移" :disabled="i === 0" @click="cp.move(fav.profileId, -1)" />
-              <IconButton name="chevron-down" title="下移" :disabled="i === cp.resolved.length - 1" @click="cp.move(fav.profileId, 1)" />
-              <IconButton name="trash" title="移除收藏" danger @click="cp.unpin(fav.profileId)" />
+              <IconButton v-if="!fav.missing" name="sliders" title="参数覆盖" :active="editId === fav.id || hasOverlay(fav)"
+                @click="editId = editId === fav.id ? null : fav.id" />
+              <IconButton name="add" title="复制为新变体" @click="cp.duplicate(fav.id)" />
+              <IconButton name="chevron-up" title="上移" :disabled="i === 0" @click="cp.move(fav.id, -1)" />
+              <IconButton name="chevron-down" title="下移" :disabled="i === savedList.length - 1" @click="cp.move(fav.id, 1)" />
+              <IconButton name="trash" title="移除" danger @click="cp.remove(fav.id)" />
             </div>
           </div>
-          <!-- Per-rig param override — the temp/penalties ST's profile switch doesn't carry. -->
-          <div v-if="paramOpen === fav.profileId" class="cp__params">
+
+          <!-- Per-rig overlay: capture from ST, tweak params, edit 附加参数. -->
+          <div v-if="editId === fav.id && !fav.missing" class="cp__edit">
+            <button type="button" class="cp__capture" @click="cp.capture(fav.id)">
+              <PetIcon name="download" />从当前 ST 捕获参数
+            </button>
             <label v-for="def in commonDefs" :key="def.id" class="cp__param">
               <span class="cp__paramlabel">{{ def.label }}</span>
-              <TextField :model-value="paramValue(fav, def.id)" placeholder="默认" compact
-                @update:model-value="onParam(fav.profileId, def.id, $event)" />
+              <input class="pet-field pet-field--compact cp__paraminput" type="text"
+                :value="paramValue(fav, def.id)" placeholder="默认" @change="onParam(fav.id, def.id, $event)" />
             </label>
-            <p class="cp__paramhint">留空＝沿用该档案预设的默认值。切换时写入，补上 ST 切档案时不带的采样参数。</p>
+            <Section title="附加参数" size="sm" :default-open="false">
+              <label v-for="ex in EXTRA_FIELDS" :key="ex.key" class="cp__extra">
+                <span class="cp__paramlabel">{{ ex.label }}</span>
+                <textarea class="pet-field cp__extrainput" rows="2" :value="extraValue(fav, ex.key)"
+                  @change="onExtra(fav.id, ex.key, $event)"></textarea>
+              </label>
+            </Section>
+            <p class="cp__hint">留空＝沿用档案默认。切换时写入，补上 ST 切换时不带的采样参数与附加参数。</p>
           </div>
         </li>
       </ul>
+      <p v-else class="cp__empty">没有匹配的已保存档案。</p>
+    </Section>
 
-      <p class="cp__sublead">从 ST 连接配置添加：</p>
-      <ul v-if="cp.available.length" class="cp__add">
-        <li v-for="p in cp.available" :key="p.id" class="cp__addrow">
+    <!-- 未保存 — ST profiles without a variant yet; add one. Only when the eye is off. -->
+    <Section v-if="!cp.savedOnly" title="未保存" size="sm" :default-open="true">
+      <ul v-if="unsavedList.length" class="cp__list">
+        <li v-for="p in unsavedList" :key="p.id" class="cp__addrow">
           <span class="cp__addname" :title="p.name">{{ p.name }}</span>
-          <IconButton name="add" title="收藏" @click="cp.pin(p.id)" />
+          <span v-if="p.model" class="cp__meta">{{ p.model }}</span>
+          <IconButton name="add" title="保存为档案" @click="cp.createVariant(p.id)" />
         </li>
       </ul>
       <p v-else class="cp__empty">没有更多可添加的连接配置（或 ST 不可用）。</p>
-      <button type="button" class="cp__refresh" @click="cp.refresh()"><PetIcon name="refresh" />刷新列表</button>
     </Section>
   </div>
 </template>
@@ -128,29 +160,28 @@ onMounted(() => cp.refresh());
   gap: var(--pet-space-sm);
   padding: var(--pet-space-sm);
 }
-.cp__switch {
+/* Row 1 — chip bar (mirrors the console's 模式 row). */
+.cp__bar {
   display: flex;
-  flex-direction: column;
-  gap: var(--pet-space-xs);
+  align-items: center;
+  gap: var(--pet-space-sm);
+  min-width: 0;
 }
-.cp__lead,
-.cp__sublead {
-  margin: 0;
-  font-size: var(--pet-font-size-xs);
+.cp__barlabel {
+  flex: none;
+  font-size: var(--pet-font-size-sm);
+  font-weight: var(--pet-font-weight-semibold);
   color: var(--pet-color-text-muted);
-}
-.cp__sublead {
-  margin-top: var(--pet-space-xs);
 }
 .cp__chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--pet-space-xs);
+  min-width: 0;
 }
-/* Chips carry a label + a smaller model line, stacked. */
 .cp__chiplabel {
   display: block;
-  max-width: 220px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -160,6 +191,16 @@ onMounted(() => cp.refresh());
   font-size: var(--pet-font-size-xxs);
   font-weight: var(--pet-font-weight-normal);
   opacity: 0.7;
+}
+/* Row 2 — search + tools. */
+.cp__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--pet-space-xs);
+}
+.cp__search {
+  flex: 1;
+  min-width: 0;
 }
 .cp__empty {
   margin: 0;
@@ -174,13 +215,8 @@ onMounted(() => cp.refresh());
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-danger, #d66);
 }
-.cp__error :deep(.pet-icon) {
-  width: 13px;
-  height: 13px;
-  flex: none;
-}
-.cp__list,
-.cp__add {
+.cp__error :deep(.pet-icon) { width: 13px; height: 13px; flex: none; }
+.cp__list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -194,15 +230,26 @@ onMounted(() => cp.refresh());
   gap: 4px;
   padding: 2px 0;
 }
+.cp__row--missing { opacity: 0.65; }
 .cp__rowtop {
   display: flex;
   align-items: center;
   gap: var(--pet-space-xs);
 }
-.cp__row--missing {
-  opacity: 0.65;
+.cp__rowtop :deep(.pet-field) { flex: 1; min-width: 0; }
+.cp__meta {
+  flex: none;
+  max-width: 38%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--pet-font-size-xxs);
+  color: var(--pet-color-text-muted);
 }
-.cp__params {
+.cp__tag { flex: none; font-size: var(--pet-font-size-xxs); color: var(--pet-color-danger, #d66); }
+.cp__rowactions { display: flex; gap: 1px; flex: none; }
+/* Overlay editor. */
+.cp__edit {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -212,55 +259,41 @@ onMounted(() => cp.refresh());
   background: color-mix(in srgb, var(--pet-color-accent), transparent 94%);
   border-radius: var(--pet-radius-sm);
 }
-.cp__param {
-  display: flex;
+.cp__capture {
+  align-self: flex-start;
+  display: inline-flex;
   align-items: center;
-  gap: var(--pet-space-xs);
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: var(--pet-font-size-xs);
+  color: var(--pet-color-accent);
+  background: color-mix(in srgb, var(--pet-color-accent), transparent 88%);
+  border: 1px solid color-mix(in srgb, var(--pet-color-accent), transparent 70%);
+  border-radius: var(--pet-radius-sm);
+  cursor: pointer;
 }
+.cp__capture :deep(.pet-icon) { width: 13px; height: 13px; }
+.cp__param,
+.cp__extra { display: flex; align-items: center; gap: var(--pet-space-xs); }
+.cp__extra { align-items: flex-start; }
 .cp__paramlabel {
   flex: 1;
   min-width: 0;
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text);
 }
-.cp__param :deep(.pet-field) {
-  width: 88px;
+.cp__paraminput { width: 88px; flex: none; }
+.cp__extrainput {
+  width: 60%;
   flex: none;
+  resize: vertical;
+  font-family: var(--pet-font-mono, monospace);
+  font-size: var(--pet-font-size-xxs);
 }
-.cp__paramhint {
+.cp__hint {
   margin: 2px 0 0;
   font-size: var(--pet-font-size-xxs);
   color: var(--pet-color-text-muted);
-}
-.cp__rowmain {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--pet-space-xs);
-}
-.cp__rowmain :deep(.pet-field) {
-  flex: 1;
-  min-width: 0;
-}
-.cp__meta {
-  flex: none;
-  max-width: 40%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--pet-font-size-xxs);
-  color: var(--pet-color-text-muted);
-}
-.cp__tag {
-  flex: none;
-  font-size: var(--pet-font-size-xxs);
-  color: var(--pet-color-danger, #d66);
-}
-.cp__rowactions {
-  display: flex;
-  gap: 1px;
-  flex: none;
 }
 .cp__addrow {
   display: flex;
@@ -275,22 +308,5 @@ onMounted(() => cp.refresh());
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--pet-font-size-sm);
-}
-.cp__refresh {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: var(--pet-space-xs);
-  padding: 0;
-  background: none;
-  border: none;
-  color: var(--pet-color-accent);
-  font-size: var(--pet-font-size-xs);
-  cursor: pointer;
-}
-.cp__refresh :deep(.pet-icon) {
-  width: 13px;
-  height: 13px;
 }
 </style>

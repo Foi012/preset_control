@@ -1,27 +1,35 @@
 /**
  * 连接档案 — the tool's Pinia store.
  *
- * Holds the user's curated **favorites** (persisted in our own localStorage, never the key,
- * never inside a preset) and the **live ST profile list** (read fresh from the gateway). All
- * structural logic is the pure `favorites.ts` model; this store just wires it to persistence,
- * the impure gateway, and Vue reactivity.
+ * Holds the user's saved **rig variants** (favorites, persisted in our own localStorage — never
+ * the key, never inside a preset) and the **live ST profile list** (read fresh from the gateway).
+ * Structural logic is the pure `favorites.ts` model; this store wires it to persistence, the
+ * impure gateway, and Vue reactivity.
  *
- * Apply = `/profile <name>` via the gateway (ST swaps url+key+model+preset). Snapshot binding
- * (applying a preset-console snapshot after the switch) is orchestrated at the toolbox shell,
- * not here, to keep the "tools never import each other" boundary — so this store carries the
- * bound `snapshotId` but does not reach into the console.
+ * Apply = `/profile <name>` (ST swaps url+key+model+preset) → `writeOverlay` re-applies the
+ * variant's param + 附加参数 override (the bits ST drops). Snapshot binding is shell-orchestrated.
  */
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import { applyProfile, listProfiles, selectedProfileId, writeParams } from './profiles';
+import { applyProfile, captureCurrent, listProfiles, selectedProfileId, writeOverlay } from './profiles';
 import {
-  addFavorite, moveFavorite, reconcileFavorites, removeFavorite, resolveForApply, setParamValue, updateFavorite,
-  type Favorite,
+  createFavorite, duplicateFavorite, moveFavorite, reconcileFavorites, removeFavorite, resolveForApply,
+  savedProfileIds, setExtraField, setOverlay, setParamValue, updateFavorite,
+  type ExtraParams, type Favorite,
 } from './favorites';
 import { resolveParamApply } from './policy';
-import type { ParamId } from './params';
+import type { ParamId, ParamSetting } from './params';
 
 const FAVORITES_KEY = 'connectionProfilesFavorites';
+
+/** A unique id for a new variant (crypto where available; cheap fallback otherwise). */
+function genId(): string {
+  try {
+    return globalThis.crypto?.randomUUID?.() ?? `cp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  } catch {
+    return `cp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+}
 
 /** Best-effort read (the srcdoc iframe may have opaque-origin storage). Drops malformed rows. */
 function readFavorites(): Favorite[] {
@@ -31,11 +39,8 @@ function readFavorites(): Favorite[] {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter((f): f is Favorite => !!f && typeof f.profileId === 'string')
-      .map(f => ({
-        profileId: f.profileId,
-        ...(typeof f.label === 'string' ? { label: f.label } : {}),
-        ...(typeof f.snapshotId === 'string' ? { snapshotId: f.snapshotId } : {}),
-      }));
+      // Migrate v1 favorites (keyed by profileId, no own id) → give them an id.
+      .map(f => ({ ...f, id: typeof f.id === 'string' ? f.id : genId() }));
   } catch {
     return [];
   }
@@ -49,41 +54,52 @@ function writeFavorites(favorites: Favorite[]): void {
   }
 }
 
+const toSettings = (params: Partial<Record<ParamId, number>>): Partial<Record<ParamId, ParamSetting>> =>
+  Object.fromEntries(Object.entries(params).map(([k, v]) => [k, { mode: 'send', value: v }]));
+
 export const useConnectionStore = defineStore('cp-connection', () => {
   const favorites = ref<Favorite[]>(readFavorites());
   const profiles = ref(listProfiles());
   const currentId = ref<string | null>(selectedProfileId());
   const applyingId = ref<string | null>(null);
   const error = ref<string | null>(null);
+  /** Management filters (mirror the console's in-use bar): a search box + a saved-only eye toggle. */
+  const search = ref('');
+  const savedOnly = ref(true);
 
-  /** Re-read ST's profiles + active selection — called on open and after applying. */
   function refresh(): void {
     profiles.value = listProfiles();
     currentId.value = selectedProfileId();
   }
 
-  /** Pinned favorites merged with live profiles (dangling ones flagged `missing`). */
+  /** Saved variants merged with live profiles (dangling → `missing`). */
   const resolved = computed(() => reconcileFavorites(favorites.value, profiles.value));
-  const pinnedIds = computed(() => new Set(favorites.value.map(f => f.profileId)));
-  /** ST profiles not yet pinned — the "add a rig" candidates. */
-  const available = computed(() => profiles.value.filter(p => !pinnedIds.value.has(p.id)));
+  const saved = computed(() => savedProfileIds(favorites.value));
+  /** ST profiles with no variant yet — the 未保存 accordion / "add a rig" source. */
+  const unsaved = computed(() => profiles.value.filter(p => !saved.value.has(p.id)));
 
   function commit(next: Favorite[]): void {
     favorites.value = next;
     writeFavorites(next);
   }
-  const pin = (id: string): void => commit(addFavorite(favorites.value, id));
-  const unpin = (id: string): void => commit(removeFavorite(favorites.value, id));
+  const createVariant = (profileId: string): void => commit(createFavorite(favorites.value, profileId, genId()));
+  const duplicate = (id: string): void => commit(duplicateFavorite(favorites.value, id, genId()));
+  const remove = (id: string): void => commit(removeFavorite(favorites.value, id));
   const relabel = (id: string, label: string): void => commit(updateFavorite(favorites.value, id, { label }));
   const bindSnapshot = (id: string, snapshotId: string): void => commit(updateFavorite(favorites.value, id, { snapshotId }));
+  const setParam = (id: string, paramId: ParamId, value: number | null): void => commit(setParamValue(favorites.value, id, paramId, value));
+  const setExtra = (id: string, key: keyof ExtraParams, value: string): void => commit(setExtraField(favorites.value, id, key, value));
   const move = (id: string, dir: -1 | 1): void => commit(moveFavorite(favorites.value, id, dir));
-  /** Set (number) or clear (null) one param override on a favorite. */
-  const setParam = (id: string, paramId: ParamId, value: number | null): void =>
-    commit(setParamValue(favorites.value, id, paramId, value));
+
+  /** 捕获当前: snapshot ST's live params + 附加参数 into the variant (no typing). */
+  function capture(id: string): void {
+    const { params, extra } = captureCurrent();
+    commit(setOverlay(favorites.value, id, toSettings(params), extra));
+  }
 
   /**
-   * Switch ST to a pinned rig: `/profile` (url+key+model+preset) → then re-apply the favorite's
-   * param override (the part ST drops). Blocks with a message if the profile was deleted in ST.
+   * Switch to a saved rig: `/profile` (url+key+model+preset) → re-apply the variant's param +
+   * 附加参数 overlay (the parts ST drops). Blocks with a message if the profile was deleted.
    */
   async function apply(id: string): Promise<void> {
     const target = resolveForApply(favorites.value, profiles.value, id);
@@ -99,8 +115,9 @@ export const useConnectionStore = defineStore('cp-connection', () => {
         error.value = '切换失败：无法连接 SillyTavern。';
         return;
       }
-      const { settings } = resolveParamApply({ profileId: id, params: target.params });
-      if (Object.keys(settings).length) writeParams(settings);
+      const { settings } = resolveParamApply({ profileId: target.profileId, params: target.params });
+      const extra: ExtraParams = target.extra ?? {};
+      if (Object.keys(settings).length || Object.keys(extra).length) writeOverlay(settings, extra);
       currentId.value = selectedProfileId();
     } finally {
       applyingId.value = null;
@@ -108,8 +125,8 @@ export const useConnectionStore = defineStore('cp-connection', () => {
   }
 
   return {
-    favorites, profiles, currentId, applyingId, error,
-    resolved, available,
-    refresh, pin, unpin, relabel, bindSnapshot, setParam, move, apply,
+    favorites, profiles, currentId, applyingId, error, search, savedOnly,
+    resolved, unsaved,
+    refresh, createVariant, duplicate, remove, relabel, bindSnapshot, setParam, setExtra, capture, move, apply,
   };
 });

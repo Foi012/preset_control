@@ -14,11 +14,25 @@
 > switcher + 管理档案 + per-rig param editor); shell wired (`ToolId += 'connection'`, launcher card,
 > `App.vue`).
 >
-> **Why params are wired (not parked):** confirmed live that **ST profiles do NOT carry sampling
-> params** (switching applies the preset but not temp/penalties; it can also flip regex off — an
-> ST bug). So binding temp/params per rig and re-applying them after `/profile` is the tool's
-> real value over plain ST. **Still TODO:** snapshot binding (shell-orchestrated), `drop`/`lock`
-> param UI + `custom_exclude_body` format, the regex-stays-on guard, UI polish after live render.
+> **Why params are wired (not parked):** confirmed live that **ST profiles carry NO sampling
+> params and NO 附加参数** (schema is api/url/model/preset/key/regex only) — switching applies the
+> preset but not temp/penalties (and can flip regex off, an ST bug). So binding them per rig and
+> re-applying after `/profile` is the tool's real value over plain ST.
+>
+> **v2 (2026-06-25, per user feedback):**
+> - **Multi-variant model.** A favorite is a "rig variant" with its own `id`; **several favorites
+>   may share one `profileId`** (Claude热/Claude冷 over one connection). All ops key by favorite id.
+> - **附加参数.** `Favorite.extra { includeBody, excludeBody, headers }` → ST `custom_include_body /
+>   custom_exclude_body / custom_include_headers`, captured/written by the gateway.
+> - **捕获当前.** Instead of typing values, the editor reads ST's live params + 附加参数 into the rig
+>   (`captureCurrent` → `setOverlay`), mirroring the console's snapshot-capture.
+> - **Console-style UI.** Row 1 `档案` + chips; row 2 search + eye toggle (saved-only) + refresh;
+>   已保存/未保存 accordions; per-variant editor (capture · param inputs · 附加参数 · duplicate/move/remove).
+>
+> **Still TODO:** snapshot binding (shell-orchestrated so tools don't import each other); verify the
+> apply WRITE lands at generation (saveSettingsDebounced-only — user reported params "not binding");
+> save/create in-extension via `/profile-create`+`/profile-update`; drop/lock UI + `custom_exclude_body`
+> format; regex-stays-on guard; UI polish after live render.
 >
 > Sibling specs: `src/features/preset-console/DESIGN.md`, `src/features/chat-export/DESIGN.md`.
 

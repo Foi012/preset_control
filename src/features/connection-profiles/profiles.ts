@@ -9,8 +9,15 @@
  * (srcdoc iframe). Reads are best-effort — return empty / false rather than throwing, so the
  * switcher shows an empty state instead of crashing.
  */
-import type { ConnProfileLite } from './favorites';
-import type { ParamId } from './params';
+import type { ConnProfileLite, ExtraParams } from './favorites';
+import { PARAMS, type ParamId } from './params';
+
+/** The three ST `chatCompletionSettings` fields behind 附加参数 (主体参数包含/排除/请求标头). */
+const EXTRA_FIELDS: Record<keyof ExtraParams, string> = {
+  includeBody: 'custom_include_body',
+  excludeBody: 'custom_exclude_body',
+  headers: 'custom_include_headers',
+};
 
 interface StContext {
   extensionSettings?: { connectionManager?: { profiles?: RawProfile[]; selectedProfile?: string } };
@@ -71,22 +78,47 @@ export async function applyProfile(name: string): Promise<boolean> {
 }
 
 /**
- * Write the favorite's param override into `chatCompletionSettings` — the bit ST's profile
- * switch drops (temp/penalties live here under `_openai`-suffixed fields). Applied **after**
- * `applyProfile` so it wins over the preset the profile loaded. Best-effort → `false`.
+ * Read the **current** live values from ST — the basis for 捕获当前, so the user sets their
+ * sampler in ST and we snapshot it rather than making them type numbers. Returns the managed
+ * params (only fields ST actually has) + the three 附加参数 strings. Best-effort → empty.
+ */
+export function captureCurrent(): { params: Partial<Record<ParamId, number>>; extra: ExtraParams } {
+  const s = stContext()?.chatCompletionSettings;
+  const params: Partial<Record<ParamId, number>> = {};
+  const extra: ExtraParams = {};
+  if (!s) return { params, extra };
+  for (const def of PARAMS) {
+    const v = s[def.id];
+    if (typeof v === 'number' && Number.isFinite(v)) params[def.id] = v;
+  }
+  for (const [key, field] of Object.entries(EXTRA_FIELDS)) {
+    const v = s[field];
+    if (typeof v === 'string' && v.trim()) extra[key as keyof ExtraParams] = v;
+  }
+  return { params, extra };
+}
+
+/**
+ * Write the favorite's overlay into `chatCompletionSettings` — the bits ST's profile switch
+ * drops (temp/penalties under `_openai` fields + the three 附加参数 text fields). Applied
+ * **after** `applyProfile` so it wins over the preset the profile loaded. Best-effort → `false`.
  *
  * Persists via `saveSettingsDebounced` but intentionally does **not** emit reload/preset events:
  * generation reads these live values immediately, and staying quiet avoids piling another
  * chat-reload onto the one `/profile` already triggered. (ST's sampler panel may show the old
- * number until a refresh; the request body is correct.)
+ * values until a refresh; the request body is correct.)
  */
-export function writeParams(settings: Partial<Record<ParamId, number>>): boolean {
+export function writeOverlay(settings: Partial<Record<ParamId, number>>, extra: ExtraParams): boolean {
   const ctx = stContext();
   const s = ctx?.chatCompletionSettings;
   if (!s) return false;
   try {
     for (const [field, value] of Object.entries(settings)) {
       if (typeof value === 'number' && Number.isFinite(value)) s[field] = value;
+    }
+    for (const [key, field] of Object.entries(EXTRA_FIELDS)) {
+      const v = extra[key as keyof ExtraParams];
+      if (typeof v === 'string') s[field] = v;
     }
     ctx.saveSettingsDebounced?.();
     return true;
