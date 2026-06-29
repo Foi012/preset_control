@@ -1262,7 +1262,7 @@ export const useConsoleStore = defineStore('pet-console', () => {
 export type ThemePref = 'dark' | 'light';
 
 /** Toolbox tools the floating panel can host. `home` = the launcher/feature picker. */
-export type ToolId = 'home' | 'preset' | 'export';
+export type ToolId = 'home' | 'preset' | 'export' | 'connection';
 
 const ACTIVE_TOOL_KEY = 'presetConsoleActiveTool';
 
@@ -1270,7 +1270,7 @@ const ACTIVE_TOOL_KEY = 'presetConsoleActiveTool';
 function readActiveTool(): ToolId {
   try {
     const raw = window.localStorage?.getItem(ACTIVE_TOOL_KEY);
-    if (raw === 'home' || raw === 'preset' || raw === 'export') return raw;
+    if (raw === 'home' || raw === 'preset' || raw === 'export' || raw === 'connection') return raw;
   } catch {
     /* opaque origin / disabled storage — fall back to the launcher */
   }

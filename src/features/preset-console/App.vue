@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useUiStore } from './store';
 import ChatExport from '../chat-export/ChatExport.vue';
+import ConnectionProfiles from '../connection-profiles/ConnectionProfiles.vue';
 import IconButton from '@/ui/IconButton.vue';
 import PresetConsole from './components/PresetConsole.vue';
 import ToolboxHome from './components/ToolboxHome.vue';
@@ -12,6 +13,7 @@ const ui = useUiStore();
 const TOOL_TITLE: Record<string, string> = {
   home: '生鱼片工具箱',
   preset: '预设控制台',
+  connection: '连接档案',
   export: '聊天导出',
 };
 const title = computed(() => TOOL_TITLE[ui.activeTool] ?? '工具箱');
@@ -55,6 +57,7 @@ function emitDragEvent(name: string, event: PointerEvent): void {
 
     <ToolboxHome v-if="ui.activeTool === 'home'" />
     <PresetConsole v-else-if="ui.activeTool === 'preset'" />
+    <ConnectionProfiles v-else-if="ui.activeTool === 'connection'" />
     <ChatExport v-else-if="ui.activeTool === 'export'" />
   </section>
 </template>
