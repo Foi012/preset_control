@@ -999,9 +999,9 @@ async function onDrop(event: DragEvent): Promise<void> {
         <div class="cex__range">
           <label class="cex__opt"><input type="checkbox" v-model="limitRange" /> 限制楼层范围</label>
           <div class="cex__range-fields" :class="{ 'cex__range-fields--off': !limitRange }">
-            <TextField v-model="rangeStart" class="cex__range-input cex__numfield" type="number" compact min="1" :max="availableMessageCount" :disabled="!limitRange" />
+            <TextField v-model="rangeStart" class="cex__range-input cex__numfield" type="number" compact size="sm" min="1" :max="availableMessageCount" :disabled="!limitRange" />
             <span class="cex__range-sep">-</span>
-            <TextField v-model="rangeEnd" class="cex__range-input cex__numfield" type="number" compact min="1" :max="availableMessageCount" :disabled="!limitRange" />
+            <TextField v-model="rangeEnd" class="cex__range-input cex__numfield" type="number" compact size="sm" min="1" :max="availableMessageCount" :disabled="!limitRange" />
           </div>
           <span class="cex__range-count" :title="rangeSummary">{{ rangeSummary }}</span>
         </div>
@@ -1142,6 +1142,7 @@ async function onDrop(event: DragEvent): Promise<void> {
             <TextField
               class="cex__numfield"
               type="number"
+              size="sm"
               :model-value="focusPos"
               min="1"
               :max="navMessages.length"
@@ -1238,14 +1239,14 @@ async function onDrop(event: DragEvent): Promise<void> {
         />
         <p class="cex__hint">{{ chapterRuleHint }}</p>
         <label v-if="chapterRuleKind === 'every'" class="cex__metafield">
-          每章条数<TextField v-model="everyN" class="cex__numfield" type="number" compact min="1" />
+          每章条数<TextField v-model="everyN" class="cex__numfield" type="number" compact size="sm" min="1" />
         </label>
 
         <div class="cex__chaphead">
           <p class="cex__count">共 {{ chapters.length }} 章<span v-if="limitRange"> · 第 {{ rangeStart }}-{{ rangeEnd }} 条</span></p>
           <label v-if="chapters.length > PREVIEW_WINDOW" class="cex__metafield cex__chapstart">
             预览起始章
-            <TextField class="cex__numfield" :model-value="String(clampedStart)" type="number" compact min="1" :max="chapters.length" @update:model-value="previewStart = Math.floor(Number($event)) || 1" />
+            <TextField class="cex__numfield" :model-value="String(clampedStart)" type="number" compact size="sm" min="1" :max="chapters.length" @update:model-value="previewStart = Math.floor(Number($event)) || 1" />
           </label>
         </div>
         <ol class="cex__chaplist">
@@ -1641,9 +1642,9 @@ async function onDrop(event: DragEvent): Promise<void> {
   opacity: 0.38;
 }
 /* Shared small number input — floor range (②), message jump (③), 每章条数 + 预览起始章 (④). */
+/* Width + alignment only; the short height now comes from the shared TextField `size="sm"`. */
 .cex :deep(.cex__numfield) {
   width: 44px;
-  padding: 2px var(--pet-space-xs);
   text-align: center;
 }
 .cex__range-fields :deep(.cex__range-input:disabled) {

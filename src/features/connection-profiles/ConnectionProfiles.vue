@@ -52,11 +52,11 @@ function paramValue(fav: ResolvedFavorite, id: ParamId): string {
   const v = fav.params?.[id]?.value;
   return v === undefined ? '' : String(v);
 }
-/** Commit on change (not每keystroke) so decimals like "1.1" type cleanly. Blank clears the override. */
-function onParam(id: string, paramId: ParamId, e: Event): void {
-  const raw = (e.target as HTMLInputElement).value.trim();
-  if (raw === '') return cp.setParam(id, paramId, null);
-  const n = Number(raw);
+/** TextField `lazy` commits on blur so decimals like "1.1" type cleanly. Blank clears the override. */
+function onParam(id: string, paramId: ParamId, raw: string | number): void {
+  const text = String(raw).trim();
+  if (text === '') return cp.setParam(id, paramId, null);
+  const n = Number(text);
   if (Number.isFinite(n)) cp.setParam(id, paramId, n);
 }
 function extraValue(fav: ResolvedFavorite, key: keyof ExtraParams): string {
@@ -101,7 +101,7 @@ onMounted(() => cp.refresh());
       <ul v-if="savedList.length" class="cp__list">
         <li v-for="fav in savedList" :key="fav.id" class="cp__row" :class="{ 'cp__row--missing': fav.missing }">
           <div class="cp__rowtop">
-            <TextField :model-value="fav.label" :placeholder="fav.name || '已删除'" compact
+            <TextField :model-value="fav.label" :placeholder="fav.name || '已删除'" size="sm"
               @update:model-value="cp.relabel(fav.id, String($event))" />
             <span v-if="fav.missing" class="cp__tag">已删除</span>
             <span v-else class="cp__meta">{{ fav.model }}<template v-if="fav.preset"> · {{ fav.preset }}</template></span>
@@ -120,8 +120,8 @@ onMounted(() => cp.refresh());
             </button>
             <label v-for="def in commonDefs" :key="def.id" class="cp__param">
               <span class="cp__paramlabel">{{ def.label }}</span>
-              <input class="pet-field pet-field--compact cp__paraminput" type="text"
-                :value="paramValue(fav, def.id)" placeholder="默认" @change="onParam(fav.id, def.id, $event)" />
+              <TextField size="sm" lazy :model-value="paramValue(fav, def.id)"
+                placeholder="默认" @update:model-value="onParam(fav.id, def.id, $event)" />
             </label>
             <Section title="附加参数" size="sm" :default-open="false">
               <label v-for="ex in EXTRA_FIELDS" :key="ex.key" class="cp__extra">
@@ -268,7 +268,7 @@ onMounted(() => cp.refresh());
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text);
 }
-.cp__paraminput { width: 88px; flex: none; }
+.cp__param :deep(.pet-field) { width: 88px; flex: none; }
 .cp__extrainput {
   width: 60%;
   flex: none;
