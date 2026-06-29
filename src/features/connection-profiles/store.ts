@@ -11,7 +11,7 @@
  */
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import { applyProfile, captureCurrent, listProfiles, selectedProfileId, writeOverlay } from './profiles';
+import { applyOverlayResilient, applyProfile, captureCurrent, listProfiles, selectedProfileId } from './profiles';
 import {
   createFavorite, duplicateFavorite, moveFavorite, reconcileFavorites, removeFavorite, resolveForApply,
   savedProfileIds, setExtraField, setOverlay, setParamValue, updateFavorite,
@@ -104,6 +104,18 @@ export const useConnectionStore = defineStore('cp-connection', () => {
     commit(setOverlay(favorites.value, id, toSettings(params), extra));
   }
 
+  /** Read ST's live params + 附加参数 as a ready overlay — for the draft's 捕获 (not yet a favorite). */
+  function captureValues(): { params: Partial<Record<ParamId, ParamSetting>>; extra: ExtraParams } {
+    const { params, extra } = captureCurrent();
+    return { params: toSettings(params), extra };
+  }
+
+  /** Commit a configured draft as a new saved variant (edit-then-add). */
+  function addDraft(profileId: string, label: string, params: Partial<Record<ParamId, ParamSetting>>, extra: ExtraParams): void {
+    const id = genId();
+    commit(setOverlay(createFavorite(favorites.value, profileId, id, label || undefined), id, params, extra));
+  }
+
   /**
    * Switch to a saved rig: `/profile` (url+key+model+preset) → re-apply the variant's param +
    * 附加参数 overlay (the parts ST drops). Blocks with a message if the profile was deleted.
@@ -125,15 +137,10 @@ export const useConnectionStore = defineStore('cp-connection', () => {
       appliedId.value = id;
       currentId.value = selectedProfileId();
 
+      // Always apply: even an empty overlay must clear the previous rig's 附加参数 (each rig is a
+      // complete config). `applyOverlayResilient` re-writes after /profile's trailing reload settles.
       const { settings } = resolveParamApply({ profileId: target.profileId, params: target.params });
-      const extra: ExtraParams = target.extra ?? {};
-      if (Object.keys(settings).length || Object.keys(extra).length) {
-        // Apply the overlay now AND again after the profile's trailing chat-reload settles —
-        // /profile fires an async reload that re-applies the preset's params and would otherwise
-        // clobber our values (the "temp didn't change" report). The second write wins the race.
-        writeOverlay(settings, extra);
-        setTimeout(() => writeOverlay(settings, extra), 500);
-      }
+      applyOverlayResilient(settings, target.extra ?? {});
     } finally {
       applyingId.value = null;
     }
@@ -142,6 +149,6 @@ export const useConnectionStore = defineStore('cp-connection', () => {
   return {
     favorites, profiles, currentId, appliedId, applyingId, error, search, savedOnly,
     resolved, unsaved,
-    refresh, createVariant, duplicate, remove, relabel, bindSnapshot, setParam, setExtra, capture, move, apply,
+    refresh, createVariant, duplicate, remove, relabel, bindSnapshot, setParam, setExtra, capture, captureValues, addDraft, move, apply,
   };
 });

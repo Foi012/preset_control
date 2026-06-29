@@ -20,6 +20,8 @@ const props = withDefaults(
     size?: 'sm' | 'md';
     /** Commit on `change` (blur/enter) instead of every keystroke — lets decimals like `1.1` type cleanly. */
     lazy?: boolean;
+    /** Reads as plain text until hover/focus — the inline-rename look (matches the console's group name). */
+    inline?: boolean;
   }>(),
   {
     type: 'text',
@@ -28,6 +30,7 @@ const props = withDefaults(
     compact: false,
     size: 'md',
     lazy: false,
+    inline: false,
   },
 );
 
@@ -42,7 +45,7 @@ function commit(event: Event): void {
 <template>
   <input
     class="pet-field"
-    :class="{ 'pet-field--mono': mono, 'pet-field--invalid': invalid, 'pet-field--compact': compact, 'pet-field--sm': size === 'sm' }"
+    :class="{ 'pet-field--mono': mono, 'pet-field--invalid': invalid, 'pet-field--compact': compact, 'pet-field--sm': size === 'sm', 'pet-field--inline': inline }"
     :type="type"
     :value="modelValue"
     @input="!lazy && commit($event)"
@@ -80,5 +83,16 @@ function commit(event: Event): void {
 .pet-field--sm {
   padding: 2px var(--pet-space-sm);
   font-size: var(--pet-font-size-xs);
+}
+/* Inline-rename: transparent until hover/focus, so the value reads as a label you can click to edit. */
+.pet-field--inline {
+  background: transparent;
+  border-color: transparent;
+}
+.pet-field--inline:hover {
+  border-color: var(--pet-color-border);
+}
+.pet-field--inline:focus {
+  background: var(--pet-color-surface);
 }
 </style>
