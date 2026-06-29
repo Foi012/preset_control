@@ -24,6 +24,8 @@ interface StContext {
   executeSlashCommandsWithOptions?: (text: string) => Promise<{ pipe?: unknown }>;
   chatCompletionSettings?: Record<string, unknown>;
   saveSettingsDebounced?: () => void;
+  eventSource?: { once?: (event: string, cb: () => void) => void; emit?: (event: string, ...args: unknown[]) => unknown };
+  eventTypes?: Record<string, string>;
 }
 interface RawProfile {
   id?: string;
@@ -103,10 +105,14 @@ export function captureCurrent(): { params: Partial<Record<ParamId, number>>; ex
  * drops (temp/penalties under `_openai` fields + the three 附加参数 text fields). Applied
  * **after** `applyProfile` so it wins over the preset the profile loaded. Best-effort → `false`.
  *
- * Persists via `saveSettingsDebounced` but intentionally does **not** emit reload/preset events:
- * generation reads these live values immediately, and staying quiet avoids piling another
- * chat-reload onto the one `/profile` already triggered. (ST's sampler panel may show the old
- * values until a refresh; the request body is correct.)
+ * The three 附加参数 fields are written **unconditionally** (an unset one → `''`): a rig's overlay
+ * is its *complete* state, so switching to a variant that doesn't set 包含主体参数 must **clear** it,
+ * not leave the previous rig's value (the "what-to-include stays the same" bug). Params are only
+ * written when the variant sets them — an unset param legitimately falls back to the preset's value
+ * that `/profile` just loaded.
+ *
+ * Persists via `saveSettingsDebounced`. Generation reads these live values; the resilient re-apply
+ * below handles the trailing reload that would otherwise clobber them.
  */
 export function writeOverlay(settings: Partial<Record<ParamId, number>>, extra: ExtraParams): boolean {
   const ctx = stContext();
@@ -117,12 +123,34 @@ export function writeOverlay(settings: Partial<Record<ParamId, number>>, extra: 
       if (typeof value === 'number' && Number.isFinite(value)) s[field] = value;
     }
     for (const [key, field] of Object.entries(EXTRA_FIELDS)) {
-      const v = extra[key as keyof ExtraParams];
-      if (typeof v === 'string') s[field] = v;
+      s[field] = extra[key as keyof ExtraParams] ?? '';
     }
     ctx.saveSettingsDebounced?.();
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * Apply the overlay resiliently against `/profile`'s **trailing async chat-reload**, which
+ * re-applies the freshly-loaded preset's params *after* our first write and otherwise clobbers
+ * it (the "temp doesn't change" bug). Strategy: write now, then write **again** once ST fires
+ * `CHAT_CHANGED` (reload finished) — with a timeout fallback if that event never comes. The
+ * `done` guard makes the re-apply fire exactly once.
+ */
+export function applyOverlayResilient(settings: Partial<Record<ParamId, number>>, extra: ExtraParams): void {
+  writeOverlay(settings, extra);
+  const ctx = stContext();
+  let done = false;
+  const reapply = (): void => {
+    if (done) return;
+    done = true;
+    writeOverlay(settings, extra);
+  };
+  const evt = ctx?.eventTypes?.CHAT_CHANGED;
+  if (evt && ctx?.eventSource?.once) {
+    try { ctx.eventSource.once(evt, reapply); } catch { /* fall through to the timeout */ }
+  }
+  setTimeout(reapply, 800);
 }

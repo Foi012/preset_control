@@ -5,6 +5,7 @@ import type { ModeSnapshot, ResolvedSection } from '../types';
 import { useHideOnScroll } from '../useHideOnScroll';
 import Dropdown from '@/ui/Dropdown.vue';
 import IconButton from '@/ui/IconButton.vue';
+import SearchField from '@/ui/SearchField.vue';
 import ModeBar from './ModeBar.vue';
 import SectionCard from './SectionCard.vue';
 
@@ -161,7 +162,7 @@ function deleteActiveSnapshot(): void {
         </span>
       </div>
       <div class="pet-inuse__bar">
-        <input v-model="search" class="pet-inuse__search" placeholder="搜索条目" />
+        <SearchField v-model="search" placeholder="搜索条目" />
         <IconButton
           name="power"
           :active="allEnabled"
@@ -300,24 +301,7 @@ function deleteActiveSnapshot(): void {
   align-items: center;
   gap: var(--pet-space-xs);
 }
-.pet-inuse__search {
-  flex: 1;
-  min-width: 0;
-  height: 32px;
-  box-sizing: border-box;
-  padding: 0 var(--pet-space-sm);
-  font-size: var(--pet-font-size-sm);
-  line-height: var(--pet-font-leading-tight);
-  color: var(--pet-color-text);
-  background: var(--pet-color-surface-raised);
-  border: 1px solid var(--pet-color-border);
-  border-radius: var(--pet-radius-sm);
-}
-.pet-inuse__search:focus {
-  outline: none;
-  border-color: var(--pet-color-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pet-color-accent), transparent 65%);
-}
+/* Search input now uses the shared SearchField (same look). */
 .pet-inuse__empty {
   margin: 0;
   padding: var(--pet-space-md) var(--pet-space-sm);
