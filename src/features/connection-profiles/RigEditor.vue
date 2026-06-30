@@ -47,8 +47,8 @@ const extraValue = (key: keyof ExtraParams): string => props.extra?.[key] ?? '';
     </label>
     <Section title="附加参数" size="sm" :default-open="false">
       <label v-for="ex in EXTRA_FIELDS" :key="ex.key" class="rig__extra">
-        <span class="rig__label">{{ ex.label }}</span>
-        <textarea class="pet-field rig__extrain" rows="2" :value="extraValue(ex.key)"
+        <span class="rig__extralabel">{{ ex.label }}</span>
+        <textarea class="pet-field pet-field--sm rig__extrain" rows="2" :value="extraValue(ex.key)"
           @change="emit('extra', ex.key, ($event.target as HTMLTextAreaElement).value)"></textarea>
       </label>
     </Section>
@@ -67,7 +67,7 @@ const extraValue = (key: keyof ExtraParams): string => props.extra?.[key] ?? '';
   border-left: 2px solid color-mix(in srgb, var(--pet-color-accent), transparent 70%);
 }
 .rig__capture {
-  align-self: flex-start;
+  align-self: flex-end;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -80,9 +80,7 @@ const extraValue = (key: keyof ExtraParams): string => props.extra?.[key] ?? '';
   cursor: pointer;
 }
 .rig__capture :deep(.pet-icon) { width: 13px; height: 13px; }
-.rig__param,
-.rig__extra { display: flex; align-items: center; gap: var(--pet-space-xs); }
-.rig__extra { align-items: flex-start; }
+.rig__param { display: flex; align-items: center; gap: var(--pet-space-xs); }
 .rig__label {
   flex: 1;
   min-width: 0;
@@ -90,12 +88,21 @@ const extraValue = (key: keyof ExtraParams): string => props.extra?.[key] ?? '';
   color: var(--pet-color-text);
 }
 .rig__param :deep(.pet-field) { width: 88px; flex: none; }
+/* 附加参数: label above a full-width field that matches the standard sm input. */
+.rig__extra {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rig__extra + .rig__extra { margin-top: var(--pet-space-xs); }
+.rig__extralabel {
+  font-size: var(--pet-font-size-xs);
+  color: var(--pet-color-text);
+}
 .rig__extrain {
-  width: 60%;
-  flex: none;
+  width: 100%;
+  box-sizing: border-box;
   resize: vertical;
-  font-family: var(--pet-font-mono, monospace);
-  font-size: var(--pet-font-size-xxs);
 }
 .rig__hint {
   margin: 2px 0 0;
