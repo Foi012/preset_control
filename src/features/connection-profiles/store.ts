@@ -57,6 +57,15 @@ function writeFavorites(favorites: Favorite[]): void {
 const toSettings = (params: Partial<Record<ParamId, number>>): Partial<Record<ParamId, ParamSetting>> =>
   Object.fromEntries(Object.entries(params).map(([k, v]) => [k, { mode: 'send', value: v }]));
 
+/** Mirror the preset console's input-field save feedback (`已保存`), best-effort if toastr exists. */
+function notify(msg: string): void {
+  try {
+    (globalThis as { toastr?: { success?: (m: string) => void } }).toastr?.success?.(msg);
+  } catch {
+    /* no toastr in this mount */
+  }
+}
+
 export const useConnectionStore = defineStore('cp-connection', () => {
   const favorites = ref<Favorite[]>(readFavorites());
   const profiles = ref(listProfiles());
@@ -94,14 +103,21 @@ export const useConnectionStore = defineStore('cp-connection', () => {
   const remove = (id: string): void => commit(removeFavorite(favorites.value, id));
   const relabel = (id: string, label: string): void => commit(updateFavorite(favorites.value, id, { label }));
   const bindSnapshot = (id: string, snapshotId: string): void => commit(updateFavorite(favorites.value, id, { snapshotId }));
-  const setParam = (id: string, paramId: ParamId, value: number | null): void => commit(setParamValue(favorites.value, id, paramId, value));
-  const setExtra = (id: string, key: keyof ExtraParams, value: string): void => commit(setExtraField(favorites.value, id, key, value));
+  function setParam(id: string, paramId: ParamId, value: number | null): void {
+    commit(setParamValue(favorites.value, id, paramId, value));
+    notify('已保存');
+  }
+  function setExtra(id: string, key: keyof ExtraParams, value: string): void {
+    commit(setExtraField(favorites.value, id, key, value));
+    notify('已保存');
+  }
   const move = (id: string, dir: -1 | 1): void => commit(moveFavorite(favorites.value, id, dir));
 
   /** 捕获当前: snapshot ST's live params + 附加参数 into the variant (no typing). */
   function capture(id: string): void {
     const { params, extra } = captureCurrent();
     commit(setOverlay(favorites.value, id, toSettings(params), extra));
+    notify('已捕获当前参数');
   }
 
   /** Read ST's live params + 附加参数 as a ready overlay — for the draft's 捕获 (not yet a favorite). */
@@ -114,6 +130,7 @@ export const useConnectionStore = defineStore('cp-connection', () => {
   function addDraft(profileId: string, label: string, params: Partial<Record<ParamId, ParamSetting>>, extra: ExtraParams): void {
     const id = genId();
     commit(setOverlay(createFavorite(favorites.value, profileId, id, label || undefined), id, params, extra));
+    notify('已添加档案');
   }
 
   /**

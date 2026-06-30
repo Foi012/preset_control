@@ -28,7 +28,7 @@ const OPEN_WIDTH = 385;
 const OPEN_MAX_HEIGHT = 660;
 const OPEN_HEIGHT_RATIO = 0.78;
 const HOME_WIDTH = 224;
-const HOME_HEIGHT = 100;
+const HOME_HEIGHT = 168;
 const EDGE_PADDING = 4;
 /** Below this host width the panel goes near-full-width; side navs become drawers. */
 const COMPACT_MAX_WIDTH = 480;

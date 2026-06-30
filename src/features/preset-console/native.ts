@@ -13,7 +13,8 @@ const OPEN_WIDTH = 385;
 const OPEN_MAX_HEIGHT = 660;
 const OPEN_HEIGHT_RATIO = 0.78;
 const HOME_WIDTH = 224;
-const HOME_HEIGHT = 100;
+// Hugs the launcher card list — bump when adding a toolbox tool (currently 3 ≈ 48px each + padding).
+const HOME_HEIGHT = 168;
 const EDGE_PADDING = 4;
 const COMPACT_MAX_WIDTH = 480;
 
