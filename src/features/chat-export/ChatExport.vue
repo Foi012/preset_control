@@ -1162,6 +1162,15 @@ async function onDrop(event: DragEvent): Promise<void> {
           <div class="cex__pane">
             <div class="cex__pvhead">
               <span class="cex__panelabel">清理后<span class="cex__floor" title="该消息在原聊天中的楼层号">#{{ focused.srcIndex }}</span></span>
+              <span class="cex__pvhead-tags">
+                <span v-for="(val, key) in focusedExtract.fields" :key="key" class="cex__field" :title="`${key}: ${val}`">{{ key }}: {{ val }}</span>
+                <span v-if="!focusedExtract.body.trim()" class="cex__nomatch" title="清理后为空，不会写入电子书">空</span>
+                <span
+                  v-else-if="(includeRules.length || titleRules.length) && focused.role === 'assistant' && !focusedExtract.matched"
+                  class="cex__nomatch"
+                  title="未匹配正文 / 标题规则，已回退为整段"
+                >未匹配</span>
+              </span>
               <span class="cex__pvnav">
                 <IconButton name="chevron-left" title="上一条" :disabled="focusIndex <= 0" @click="focusPrev" />
                 <span class="cex__pvpos">
@@ -1177,15 +1186,6 @@ async function onDrop(event: DragEvent): Promise<void> {
                   / {{ navMessages.length }}
                 </span>
                 <IconButton name="chevron-right" title="下一条" :disabled="focusIndex >= navMessages.length - 1" @click="focusNext" />
-              </span>
-              <span class="cex__pvhead-tags">
-                <span v-for="(val, key) in focusedExtract.fields" :key="key" class="cex__field">{{ key }}: {{ val }}</span>
-                <span v-if="!focusedExtract.body.trim()" class="cex__nomatch" title="清理后为空，不会写入电子书">空</span>
-                <span
-                  v-else-if="(includeRules.length || titleRules.length) && focused.role === 'assistant' && !focusedExtract.matched"
-                  class="cex__nomatch"
-                  title="未匹配正文 / 标题规则，已回退为整段"
-                >未匹配</span>
               </span>
             </div>
             <div class="cex__panebody cex__panebody--after">{{ focusedExtract.body }}</div>
@@ -1507,7 +1507,8 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .cex__searchrow .cex__pvscope {
   flex: 0 0 auto;
-  min-width: 128px;
+  min-width: 0;
+  width: 96px;
 }
 /* Empty result line when the search/scope filter matches nothing. */
 .cex__empty {
@@ -1847,6 +1848,10 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 .cex__field {
   flex: none;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 1px 6px;
   border-radius: var(--pet-radius-pill);
   font-size: var(--pet-font-size-xxs);
@@ -1919,11 +1924,13 @@ async function onDrop(event: DragEvent): Promise<void> {
 .cex__preview {
   margin-top: 0;
 }
-/* Page nav now rides the 清理后 pane header (saves a whole row). */
+/* Page nav rides the 清理后 pane header, pinned to the right; label + tags sit on the left. */
 .cex__pvnav {
   display: inline-flex;
   align-items: center;
   gap: var(--pet-space-xxs);
+  flex: none;
+  margin-left: auto;
 }
 .cex__pvpos {
   display: inline-flex;
@@ -1960,8 +1967,9 @@ async function onDrop(event: DragEvent): Promise<void> {
   gap: var(--pet-space-xs);
   min-width: 0;
 }
+/* Tags sit next to the 清理后 label (no longer pushed right) and shrink rather than wrap the nav. */
 .cex__pvhead-tags {
-  margin-left: auto;
+  flex: 0 1 auto;
 }
 /* Role badge — an icon chip (bot / user) at the right of the 原文 pane header. */
 .cex__role {
