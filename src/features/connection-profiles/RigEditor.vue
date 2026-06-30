@@ -8,6 +8,7 @@ import { paramDef, type ParamId } from './params';
 import type { ParamSetting } from './policy';
 import type { ExtraParams } from './favorites';
 import TextField from '@/ui/TextField.vue';
+import Textarea from '@/ui/Textarea.vue';
 import Section from '@/ui/Section.vue';
 import PetIcon from '@/ui/PetIcon.vue';
 
@@ -48,8 +49,8 @@ const extraValue = (key: keyof ExtraParams): string => props.extra?.[key] ?? '';
     <Section title="附加参数" size="sm" :default-open="false">
       <label v-for="ex in EXTRA_FIELDS" :key="ex.key" class="rig__extra">
         <span class="rig__extralabel">{{ ex.label }}</span>
-        <textarea class="pet-field pet-field--sm rig__extrain" rows="2" :value="extraValue(ex.key)"
-          @change="emit('extra', ex.key, ($event.target as HTMLTextAreaElement).value)"></textarea>
+        <Textarea rows="2" :model-value="extraValue(ex.key)"
+          @update:model-value="emit('extra', ex.key, $event)" />
       </label>
     </Section>
     <p class="rig__hint">留空＝沿用档案默认。切换时写入，补上 ST 切换时不带的采样参数与附加参数。</p>
@@ -88,7 +89,7 @@ const extraValue = (key: keyof ExtraParams): string => props.extra?.[key] ?? '';
   color: var(--pet-color-text);
 }
 .rig__param :deep(.pet-field) { width: 88px; flex: none; }
-/* 附加参数: label above a full-width field that matches the standard sm input. */
+/* 附加参数: label above a full-width shared Textarea (matches the preset console's input). */
 .rig__extra {
   display: flex;
   flex-direction: column;
@@ -98,11 +99,6 @@ const extraValue = (key: keyof ExtraParams): string => props.extra?.[key] ?? '';
 .rig__extralabel {
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text);
-}
-.rig__extrain {
-  width: 100%;
-  box-sizing: border-box;
-  resize: vertical;
 }
 .rig__hint {
   margin: 2px 0 0;

@@ -1134,8 +1134,11 @@ async function onDrop(event: DragEvent): Promise<void> {
       <h2 class="cex__title">预览效果</h2>
       <p class="cex__lead">逐条对比原文与整理后的正文，确认规则符合预期。</p>
 
-      <!-- Keyword search — narrows the nav within the active scope dropdown. -->
-      <SearchField v-model="searchQuery" class="cex__search" placeholder="搜索关键词，定位包含该词的消息" />
+      <!-- Keyword search + scope filter share one row; the dropdown narrows the search result. -->
+      <div class="cex__searchrow">
+        <SearchField v-model="searchQuery" class="cex__search" placeholder="搜索关键词，定位包含该词的消息" />
+        <Dropdown class="cex__pvscope" align="right" :model-value="navScope" :options="navScopeOptions" @update:model-value="setNavScope" />
+      </div>
 
       <!-- Health flags: each whole row is a button that scopes the nav to just those messages. -->
       <div v-if="previewFlags.empty || previewFlags.unmatched" class="cex__flags">
@@ -1153,30 +1156,28 @@ async function onDrop(event: DragEvent): Promise<void> {
 
       <!-- Phase 3: after / before preview -->
       <div v-if="focused && focusedExtract" class="cex__preview">
-        <div class="cex__pvnav">
-          <IconButton name="chevron-left" title="上一条" :disabled="focusIndex <= 0" @click="focusPrev" />
-          <span class="cex__pvpos">
-            第
-            <TextField
-              class="cex__numfield"
-              type="number"
-              size="sm"
-              :model-value="focusPos"
-              min="1"
-              :max="navMessages.length"
-              @update:model-value="focusPos = Number($event)"
-            />
-            / {{ navMessages.length }} 条
-          </span>
-          <IconButton name="chevron-right" title="下一条" :disabled="focusIndex >= navMessages.length - 1" @click="focusNext" />
-          <Dropdown class="cex__pvscope" variant="inline" align="right" :model-value="navScope" :options="navScopeOptions" @update:model-value="setNavScope" />
-        </div>
         <p v-if="jumpError" class="cex__warn cex__jumperror">{{ jumpError }}</p>
         <div class="cex__diff">
-          <!-- After first — the result the user is verifying. -->
+          <!-- After first — the result the user is verifying. The page nav rides this header. -->
           <div class="cex__pane">
             <div class="cex__pvhead">
               <span class="cex__panelabel">清理后<span class="cex__floor" title="该消息在原聊天中的楼层号">#{{ focused.srcIndex }}</span></span>
+              <span class="cex__pvnav">
+                <IconButton name="chevron-left" title="上一条" :disabled="focusIndex <= 0" @click="focusPrev" />
+                <span class="cex__pvpos">
+                  <TextField
+                    class="cex__numfield"
+                    type="number"
+                    size="sm"
+                    :model-value="focusPos"
+                    min="1"
+                    :max="navMessages.length"
+                    @update:model-value="focusPos = Number($event)"
+                  />
+                  / {{ navMessages.length }}
+                </span>
+                <IconButton name="chevron-right" title="下一条" :disabled="focusIndex >= navMessages.length - 1" @click="focusNext" />
+              </span>
               <span class="cex__pvhead-tags">
                 <span v-for="(val, key) in focusedExtract.fields" :key="key" class="cex__field">{{ key }}: {{ val }}</span>
                 <span v-if="!focusedExtract.body.trim()" class="cex__nomatch" title="清理后为空，不会写入电子书">空</span>
@@ -1497,10 +1498,16 @@ async function onDrop(event: DragEvent): Promise<void> {
   line-height: var(--pet-font-leading-normal);
   color: var(--pet-color-text-muted);
 }
-/* Preview keyword search — sits between the lead and the flags/nav. */
-.cex__search {
+/* Preview keyword search + scope filter on one row (search grows, dropdown hugs content). */
+.cex__searchrow {
   display: flex;
+  align-items: center;
+  gap: var(--pet-space-sm);
   margin-bottom: var(--pet-space-md);
+}
+.cex__searchrow .cex__pvscope {
+  flex: 0 0 auto;
+  min-width: 128px;
 }
 /* Empty result line when the search/scope filter matches nothing. */
 .cex__empty {
@@ -1912,12 +1919,11 @@ async function onDrop(event: DragEvent): Promise<void> {
 .cex__preview {
   margin-top: 0;
 }
+/* Page nav now rides the 清理后 pane header (saves a whole row). */
 .cex__pvnav {
-  display: flex;
-  flex-wrap: wrap;
+  display: inline-flex;
   align-items: center;
-  gap: var(--pet-space-sm);
-  margin-bottom: var(--pet-space-md);
+  gap: var(--pet-space-xxs);
 }
 .cex__pvpos {
   display: inline-flex;
@@ -1925,9 +1931,6 @@ async function onDrop(event: DragEvent): Promise<void> {
   gap: var(--pet-space-xs);
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text-muted);
-}
-.cex__pvscope {
-  margin-left: auto;
 }
 .cex__jumperror {
   margin-bottom: var(--pet-space-sm);
@@ -1940,11 +1943,13 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-weight: var(--pet-font-weight-normal);
   color: var(--pet-color-text-muted);
 }
-/* Pane header — label on the left, badges/role on the right. */
+/* Pane header — label (+ page nav on the 清理后 pane) left, badges/role right. */
 .cex__pvhead {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--pet-space-sm);
+  row-gap: var(--pet-space-xxs);
   margin-bottom: 4px;
 }
 .cex__pvhead-tags,
@@ -2007,7 +2012,7 @@ async function onDrop(event: DragEvent): Promise<void> {
   min-height: 0;
 }
 .cex__panelabel {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: var(--pet-font-size-xxs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
