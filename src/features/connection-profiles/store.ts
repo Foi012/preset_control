@@ -11,7 +11,10 @@
  */
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import { applyOverlayResilient, applyProfile, captureCurrent, listProfiles, selectedProfileId } from './profiles';
+import {
+  applyOverlayResilient, applyProfile, captureCurrent, listProfiles, selectedProfileId,
+  snapshotEnabledRegex, restoreRegexResilient,
+} from './profiles';
 import {
   createFavorite, duplicateFavorite, moveFavorite, reconcileFavorites, removeFavorite, resolveForApply,
   savedProfileIds, setExtraField, setOverlay, setParamValue, updateFavorite,
@@ -21,6 +24,7 @@ import { resolveParamApply } from './policy';
 import type { ParamId, ParamSetting } from './params';
 
 const FAVORITES_KEY = 'connectionProfilesFavorites';
+const KEEP_REGEX_KEY = 'connectionProfilesKeepRegex';
 
 /** A unique id for a new variant (crypto where available; cheap fallback otherwise). */
 function genId(): string {
@@ -54,6 +58,15 @@ function writeFavorites(favorites: Favorite[]): void {
   }
 }
 
+/** The keep-regex guard defaults **on** (the reported ST bug is the common case); persisted. */
+function readKeepRegex(): boolean {
+  try {
+    return window.localStorage?.getItem(KEEP_REGEX_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
 const toSettings = (params: Partial<Record<ParamId, number>>): Partial<Record<ParamId, ParamSetting>> =>
   Object.fromEntries(Object.entries(params).map(([k, v]) => [k, { mode: 'send', value: v }]));
 
@@ -77,6 +90,12 @@ export const useConnectionStore = defineStore('cp-connection', () => {
   /** Management filters (mirror the console's in-use bar): a search box + a saved-only eye toggle. */
   const search = ref('');
   const savedOnly = ref(true);
+  /** Workaround for ST flipping global regex off on a profile switch — re-enable them after. */
+  const keepRegexEnabled = ref(readKeepRegex());
+  function setKeepRegexEnabled(on: boolean): void {
+    keepRegexEnabled.value = on;
+    try { window.localStorage?.setItem(KEEP_REGEX_KEY, String(on)); } catch { /* best-effort */ }
+  }
 
   function refresh(): void {
     profiles.value = listProfiles();
@@ -145,6 +164,8 @@ export const useConnectionStore = defineStore('cp-connection', () => {
     }
     error.value = null;
     applyingId.value = id;
+    // Snapshot enabled regex *before* the switch so we can undo ST flipping some off.
+    const regexBefore = keepRegexEnabled.value ? snapshotEnabledRegex() : null;
     try {
       const ok = await applyProfile(target.name);
       if (!ok) {
@@ -158,14 +179,16 @@ export const useConnectionStore = defineStore('cp-connection', () => {
       // complete config). `applyOverlayResilient` re-writes after /profile's trailing reload settles.
       const { settings } = resolveParamApply({ profileId: target.profileId, params: target.params });
       applyOverlayResilient(settings, target.extra ?? {});
+      // Re-enable any regex the switch turned off (same resilient timing as the overlay).
+      if (regexBefore) restoreRegexResilient(regexBefore);
     } finally {
       applyingId.value = null;
     }
   }
 
   return {
-    favorites, profiles, currentId, appliedId, applyingId, error, search, savedOnly,
+    favorites, profiles, currentId, appliedId, applyingId, error, search, savedOnly, keepRegexEnabled,
     resolved, unsaved,
-    refresh, createVariant, duplicate, remove, relabel, bindSnapshot, setParam, setExtra, capture, captureValues, addDraft, move, apply,
+    refresh, createVariant, duplicate, remove, relabel, bindSnapshot, setParam, setExtra, capture, captureValues, addDraft, move, apply, setKeepRegexEnabled,
   };
 });

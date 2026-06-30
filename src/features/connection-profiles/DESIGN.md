@@ -29,10 +29,22 @@
 > - **Console-style UI.** Row 1 `档案` + chips; row 2 search + eye toggle (saved-only) + refresh;
 >   已保存/未保存 accordions; per-variant editor (capture · param inputs · 附加参数 · duplicate/move/remove).
 >
+> **Regex-stays-on guard (shipped).** ST switching a profile can silently **disable** regex scripts
+> (the profile's regex-preset association) — reported most painfully for **character-scoped** regex,
+> even switching connection while staying in the same chat. Workaround in `profiles.ts`:
+> `snapshotEnabledRegex()` captures the enabled scripts *before* `/profile` across **all three scopes**
+> — 全局 (`extensionSettings.regex`), 角色 (card `data.extensions.regex_scripts`), 预设 (current preset's,
+> via PresetManager) — walked by `regexArrays()` (the live mutable arrays, mirroring `st-regex.ts`'s
+> read); `restoreEnabledRegex` re-enables (via `disabled = false` + `saveSettingsDebounced`) any that
+> got flipped off — **one-directional** (never disables), applied through the shared
+> `runAfterProfileSettle` (same CHAT_CHANGED + 800ms timing as the param overlay, since the flip can
+> land during the trailing reload). Default-on, persisted toggle (`切换时保持正则开启`, `keepRegexEnabled`).
+> Scripts keyed by `id` (fallback to `name:<scriptName>`); preset write-back is best-effort.
+>
 > **Still TODO:** snapshot binding (shell-orchestrated so tools don't import each other); verify the
 > apply WRITE lands at generation (saveSettingsDebounced-only — user reported params "not binding");
 > save/create in-extension via `/profile-create`+`/profile-update`; drop/lock UI + `custom_exclude_body`
-> format; regex-stays-on guard; UI polish after live render.
+> format; UI polish after live render.
 >
 > Sibling specs: `src/features/preset-console/DESIGN.md`, `src/features/chat-export/DESIGN.md`.
 
