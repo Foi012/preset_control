@@ -13,6 +13,7 @@ import Button from '@/ui/Button.vue';
 import Segmented from '@/ui/Segmented.vue';
 import IconButton from '@/ui/IconButton.vue';
 import TextField from '@/ui/TextField.vue';
+import SearchField from '@/ui/SearchField.vue';
 import Dropdown from '@/ui/Dropdown.vue';
 import Section from '@/ui/Section.vue';
 import PetIcon, { type IconName } from '@/ui/PetIcon.vue';
@@ -338,8 +339,11 @@ const sourceKind = ref<'active' | 'jsonl' | null>(null);
 // turns or to just the flagged messages (empty / unmatched) for focused review.
 const focusIndex = ref(0);
 // The two flag kinds are separate scopes (different severity), not lumped into one.
-type NavScope = 'all' | 'assistant' | 'empty' | 'unmatched';
+type NavScope = 'all' | 'assistant' | 'user' | 'empty' | 'unmatched';
 const navScope = ref<NavScope>('all');
+// Keyword search over message text, applied *within* the active scope (an extra filter
+// layered on the dropdown, per the preview UX). Empty = no filtering.
+const searchQuery = ref('');
 
 // Per-message diagnostics over the export set (parallel to `messages`): empty after the
 // rules (silently dropped) and assistant turns that didn't match 正文/标题 (fell back to
@@ -365,17 +369,26 @@ const previewFlags = computed(() => {
   return { empty, unmatched, flaggedTotal };
 });
 
+// Filtered by the scope dropdown *and* the keyword search box. Both key off the original
+// index so the empty/unmatched diags (parallel to `messages`) stay aligned.
 const navMessages = computed(() => {
-  if (navScope.value === 'assistant') return messages.value.filter(m => m.role === 'assistant');
-  if (navScope.value === 'empty') return messages.value.filter((_, i) => messageDiags.value[i]?.empty);
-  if (navScope.value === 'unmatched') return messages.value.filter((_, i) => messageDiags.value[i]?.unmatched);
-  return messages.value;
+  const q = searchQuery.value.trim().toLowerCase();
+  return messages.value.filter((m, i) => {
+    const d = messageDiags.value[i];
+    if (navScope.value === 'assistant' && m.role !== 'assistant') return false;
+    if (navScope.value === 'user' && m.role !== 'user') return false;
+    if (navScope.value === 'empty' && !d?.empty) return false;
+    if (navScope.value === 'unmatched' && !d?.unmatched) return false;
+    if (q && !m.content.toLowerCase().includes(q)) return false;
+    return true;
+  });
 });
 // Each flag kind is its own scope option, shown only when it has instances.
 const navScopeOptions = computed(() => {
   const opts = [
     { value: 'all', label: '全部' },
     { value: 'assistant', label: '仅 AI' },
+    { value: 'user', label: '仅用户' },
   ];
   if (previewFlags.value.empty > 0) opts.push({ value: 'empty', label: `清理后为空 (${previewFlags.value.empty})` });
   if (previewFlags.value.unmatched > 0) opts.push({ value: 'unmatched', label: `未匹配 (${previewFlags.value.unmatched})` });
@@ -451,6 +464,8 @@ function jumpToStMessage(srcIndex: number): void {
 watch(navScopeOptions, opts => {
   if (!opts.some(o => o.value === navScope.value)) setNavScope('all');
 });
+// A new search term re-filters the list, so snap back to its first match.
+watch(searchQuery, resetNav);
 
 // Phase 4 — book metadata, chapter splitting, export.
 const bookTitle = ref('');
@@ -1119,6 +1134,9 @@ async function onDrop(event: DragEvent): Promise<void> {
       <h2 class="cex__title">预览效果</h2>
       <p class="cex__lead">逐条对比原文与整理后的正文，确认规则符合预期。</p>
 
+      <!-- Keyword search — narrows the nav within the active scope dropdown. -->
+      <SearchField v-model="searchQuery" class="cex__search" placeholder="搜索关键词，定位包含该词的消息" />
+
       <!-- Health flags: each whole row is a button that scopes the nav to just those messages. -->
       <div v-if="previewFlags.empty || previewFlags.unmatched" class="cex__flags">
         <button v-if="previewFlags.empty" type="button" class="cex__flag cex__flag--high" title="筛选查看这些消息" @click="setNavScope('empty')">
@@ -1190,6 +1208,7 @@ async function onDrop(event: DragEvent): Promise<void> {
           </div>
         </div>
       </div>
+      <p v-else class="cex__lead cex__empty">没有符合条件的消息，试试换个关键词或筛选。</p>
     </section>
 
     <section v-show="step === 'export'" class="cex__panel">
@@ -1477,6 +1496,16 @@ async function onDrop(event: DragEvent): Promise<void> {
   font-size: var(--pet-font-size-sm);
   line-height: var(--pet-font-leading-normal);
   color: var(--pet-color-text-muted);
+}
+/* Preview keyword search — sits between the lead and the flags/nav. */
+.cex__search {
+  display: flex;
+  margin-bottom: var(--pet-space-md);
+}
+/* Empty result line when the search/scope filter matches nothing. */
+.cex__empty {
+  margin-top: var(--pet-space-md);
+  text-align: center;
 }
 /* Footer step nav — a fixed bar at the panel bottom (flex child, never scrolls). */
 .cex__nav {
