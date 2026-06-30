@@ -93,6 +93,13 @@ onMounted(() => cp.refresh());
         title="仅看已保存 / 显示全部连接配置" @click="cp.savedOnly = !cp.savedOnly" />
       <IconButton name="refresh" title="刷新连接配置" @click="cp.refresh()" />
     </div>
+
+    <!-- Workaround for an ST bug: switching a profile can silently disable regex scripts. -->
+    <label class="cp__guard" title="SillyTavern 切换连接档案时有时会把部分正则脚本关闭（全局 / 角色 / 预设，常见于角色正则）。勾选后，切换会在重载完成后把切换前开启的正则重新打开。">
+      <input type="checkbox" :checked="cp.keepRegexEnabled"
+        @change="cp.setKeepRegexEnabled(($event.target as HTMLInputElement).checked)" />
+      切换时保持正则开启
+    </label>
     <p v-if="cp.error" class="cp__error"><PetIcon name="alert" />{{ cp.error }}</p>
 
     <!-- 已保存 — always visible (not an accordion). 2-row cards. -->
@@ -181,6 +188,16 @@ onMounted(() => cp.refresh());
   align-items: center;
   gap: var(--pet-space-xs);
 }
+/* Keep-regex guard toggle — a quiet option line under the tools. */
+.cp__guard {
+  display: flex;
+  align-items: center;
+  gap: var(--pet-space-xs);
+  font-size: var(--pet-font-size-xs);
+  color: var(--pet-color-text-muted);
+  cursor: pointer;
+}
+.cp__guard input { flex: none; margin: 0; cursor: pointer; }
 .cp__empty {
   margin: 0;
   font-size: var(--pet-font-size-xs);

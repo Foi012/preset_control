@@ -19,8 +19,29 @@ const EXTRA_FIELDS: Record<keyof ExtraParams, string> = {
   headers: 'custom_include_headers',
 };
 
+/** One ST regex script — the few fields we touch for the keep-enabled guard. */
+interface RegexScriptLite {
+  id?: string;
+  scriptName?: string;
+  disabled?: boolean;
+}
+/** ST's PresetManager (typed `any` upstream); the accessors we probe for preset-scoped regex. */
+interface StPresetManager {
+  getSelectedPresetName?: () => string;
+  getSelectedPreset?: () => unknown;
+  getCompletionPresetByName?: (name: string) => { extensions?: { regex_scripts?: unknown } } | undefined;
+}
 interface StContext {
-  extensionSettings?: { connectionManager?: { profiles?: RawProfile[]; selectedProfile?: string } };
+  extensionSettings?: {
+    connectionManager?: { profiles?: RawProfile[]; selectedProfile?: string };
+    /** ST's global regex scripts (the "Scripts" list); a profile switch can flip `disabled`. */
+    regex?: RegexScriptLite[];
+  };
+  /** Character-scoped regex lives on the selected card; `characterId` may be a string index. */
+  characters?: { data?: { extensions?: { regex_scripts?: RegexScriptLite[] } } }[];
+  characterId?: number | string;
+  /** Preset-scoped regex lives on the current completion preset, reached via PresetManager. */
+  getPresetManager?: (apiId?: string) => StPresetManager | undefined;
   executeSlashCommandsWithOptions?: (text: string) => Promise<{ pipe?: unknown }>;
   chatCompletionSettings?: Record<string, unknown>;
   saveSettingsDebounced?: () => void;
@@ -133,24 +154,115 @@ export function writeOverlay(settings: Partial<Record<ParamId, number>>, extra: 
 }
 
 /**
- * Apply the overlay resiliently against `/profile`'s **trailing async chat-reload**, which
- * re-applies the freshly-loaded preset's params *after* our first write and otherwise clobbers
- * it (the "temp doesn't change" bug). Strategy: write now, then write **again** once ST fires
- * `CHAT_CHANGED` (reload finished) — with a timeout fallback if that event never comes. The
- * `done` guard makes the re-apply fire exactly once.
+ * Run `fn` now and **again** once `/profile`'s **trailing async chat-reload** settles, so a
+ * write isn't clobbered by the freshly-loaded preset re-applying *after* our first call (the
+ * "temp doesn't change" bug). Fires on ST's `CHAT_CHANGED`, with an 800ms timeout fallback if
+ * that event never comes; the `done` guard makes the second run happen exactly once.
  */
-export function applyOverlayResilient(settings: Partial<Record<ParamId, number>>, extra: ExtraParams): void {
-  writeOverlay(settings, extra);
+function runAfterProfileSettle(fn: () => void): void {
+  fn();
   const ctx = stContext();
   let done = false;
-  const reapply = (): void => {
+  const again = (): void => {
     if (done) return;
     done = true;
-    writeOverlay(settings, extra);
+    fn();
   };
   const evt = ctx?.eventTypes?.CHAT_CHANGED;
   if (evt && ctx?.eventSource?.once) {
-    try { ctx.eventSource.once(evt, reapply); } catch { /* fall through to the timeout */ }
+    try { ctx.eventSource.once(evt, again); } catch { /* fall through to the timeout */ }
   }
-  setTimeout(reapply, 800);
+  setTimeout(again, 800);
+}
+
+/** Re-apply the param + 附加参数 overlay resiliently (see `runAfterProfileSettle`). */
+export function applyOverlayResilient(settings: Partial<Record<ParamId, number>>, extra: ExtraParams): void {
+  runAfterProfileSettle(() => writeOverlay(settings, extra));
+}
+
+/** A stable key for a regex script across the snapshot/restore pair: id, else its name. */
+function regexKey(s: RegexScriptLite): string | null {
+  if (typeof s.id === 'string' && s.id) return s.id;
+  if (typeof s.scriptName === 'string' && s.scriptName) return `name:${s.scriptName}`;
+  return null;
+}
+
+/**
+ * The **live, mutable** regex-script arrays across ST's three scopes — 全局 (`extensionSettings.regex`),
+ * 角色 (the selected card's `data.extensions.regex_scripts`) and 预设 (the current completion preset's),
+ * mirroring `st-regex.ts`'s read but returning the arrays by reference so we can flip `disabled` on
+ * them. A profile switch can disable scripts in **any** of these; preset access is best-effort
+ * (PresetManager is loosely typed upstream).
+ */
+function regexArrays(ctx: StContext): RegexScriptLite[][] {
+  const arrays: RegexScriptLite[][] = [];
+  const push = (v: unknown): void => {
+    if (Array.isArray(v)) arrays.push(v as RegexScriptLite[]);
+  };
+  push(ctx.extensionSettings?.regex);
+  const cid = ctx.characterId;
+  if (cid != null && cid !== '' && Number.isFinite(Number(cid))) {
+    push(ctx.characters?.[Number(cid)]?.data?.extensions?.regex_scripts);
+  }
+  try {
+    const pm = ctx.getPresetManager?.();
+    if (pm) {
+      const name = pm.getSelectedPresetName?.();
+      let preset: { extensions?: { regex_scripts?: unknown } } | undefined;
+      if (name && pm.getCompletionPresetByName) preset = pm.getCompletionPresetByName(name);
+      if (!preset) {
+        const sel = pm.getSelectedPreset?.();
+        if (sel && typeof sel === 'object') preset = sel as { extensions?: { regex_scripts?: unknown } };
+      }
+      push(preset?.extensions?.regex_scripts);
+    }
+  } catch { /* preset-scoped regex is best-effort */ }
+  return arrays;
+}
+
+/**
+ * Snapshot which regex scripts are **enabled** right now (across 全局/角色/预设), keyed by id/name.
+ * Taken *before* a profile switch so `restoreEnabledRegex` can undo ST's habit of flipping some off
+ * when the profile carries a regex-preset association. Best-effort → empty set.
+ */
+export function snapshotEnabledRegex(): Set<string> {
+  const ctx = stContext();
+  const enabled = new Set<string>();
+  if (!ctx) return enabled;
+  for (const arr of regexArrays(ctx)) {
+    for (const s of arr) {
+      const key = regexKey(s);
+      if (key && !s.disabled) enabled.add(key);
+    }
+  }
+  return enabled;
+}
+
+/**
+ * Re-enable any regex script that was enabled in `wasEnabled` but is now `disabled` — the
+ * workaround for ST switching regex off on a profile change, covering **all three scopes**.
+ * **One-directional**: only turns scripts back *on*, never off, so a script the user enabled
+ * mid-switch is left alone. Returns how many it restored. Persists via `saveSettingsDebounced`.
+ */
+export function restoreEnabledRegex(wasEnabled: Set<string>): number {
+  const ctx = stContext();
+  if (!ctx || !wasEnabled.size) return 0;
+  let restored = 0;
+  for (const arr of regexArrays(ctx)) {
+    for (const s of arr) {
+      const key = regexKey(s);
+      if (key && wasEnabled.has(key) && s.disabled) {
+        s.disabled = false;
+        restored += 1;
+      }
+    }
+  }
+  if (restored) ctx.saveSettingsDebounced?.();
+  return restored;
+}
+
+/** Restore the pre-switch enabled regex set resiliently against `/profile`'s trailing reload. */
+export function restoreRegexResilient(wasEnabled: Set<string>): void {
+  if (!wasEnabled.size) return;
+  runAfterProfileSettle(() => { restoreEnabledRegex(wasEnabled); });
 }
