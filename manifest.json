@@ -6,7 +6,7 @@
   "js": "index.js",
   "css": "",
   "author": "sashiMi",
-  "version": "0.1.0",
-  "description": "SillyTavern 工具箱：预设控制台（开关、分组、编排预设条目）与聊天导出（聊天记录导出为 TXT / EPUB）。",
+  "version": "1.6.6",
+  "description": "SillyTavern 工具箱：预设控制台（开关 / 分组 / 编排预设条目）、连接档案（一键切换机位 + 补回采样/附加参数）、聊天导出（聊天记录导出为 TXT / EPUB）。",
   "minimum_client_version": "1.12.13"
 }
