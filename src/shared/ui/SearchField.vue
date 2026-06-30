@@ -20,6 +20,11 @@ defineEmits<{ 'update:modelValue': [value: string] }>();
 
 <style scoped>
 .pet-search {
+  /* Reset the native search-field chrome: WebKit's `searchfield` appearance imposes its
+     own intrinsic height/rounding, so the declared 32px was being ignored (rendered as a
+     tall pill). `appearance: none` makes it a plain 32px box like the other fields. */
+  appearance: none;
+  -webkit-appearance: none;
   flex: 1;
   min-width: 0;
   height: 32px;

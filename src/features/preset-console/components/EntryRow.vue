@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { affordanceOf, inputValueOf, useConsoleStore } from '../store';
 import type { ResolvedEntry, ResolvedSection } from '../types';
 import SelectMark from '@/ui/SelectMark.vue';
+import Textarea from '@/ui/Textarea.vue';
 
 const props = defineProps<{ section: ResolvedSection; entry: ResolvedEntry; readonly?: boolean }>();
 const consoleStore = useConsoleStore();
@@ -17,9 +18,9 @@ function onToggle() {
   consoleStore.toggleEntry(props.section, props.entry);
 }
 
-function onInput(event: Event) {
+function onInput(value: string) {
   if (props.readonly) return;
-  consoleStore.setInputValue(props.entry, (event.target as HTMLTextAreaElement).value);
+  consoleStore.setInputValue(props.entry, value);
 }
 </script>
 
@@ -43,13 +44,12 @@ function onInput(event: Event) {
       <span class="pet-tile__label">{{ label }}</span>
       <span class="pet-tile__badge">自填</span>
     </div>
-    <textarea
-      class="pet-tile__textarea"
+    <Textarea
       rows="2"
-      :value="inputValueOf(entry)"
+      :model-value="inputValueOf(entry)"
       placeholder="点此输入…"
       :readonly="readonly"
-      @change="onInput"
+      @update:model-value="onInput"
     />
   </div>
 
@@ -186,20 +186,5 @@ function onInput(event: Event) {
   background: var(--pet-color-rule-input);
   border-radius: var(--pet-radius-sm);
 }
-.pet-tile__textarea {
-  width: 100%;
-  resize: vertical;
-  padding: var(--pet-space-xs) var(--pet-space-sm);
-  font-family: var(--pet-font-sans);
-  font-size: var(--pet-font-size-sm);
-  color: var(--pet-color-text);
-  background: var(--pet-color-surface);
-  border: 1px solid var(--pet-color-border);
-  border-radius: var(--pet-radius-sm);
-}
-.pet-tile__textarea:focus {
-  outline: none;
-  border-color: var(--pet-color-rule-input);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pet-color-rule-input), transparent 65%);
-}
+/* The input textarea is the shared `@/ui/Textarea` (style + spacing live there / on the tile). */
 </style>
