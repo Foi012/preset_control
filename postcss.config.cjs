@@ -1,6 +1,8 @@
 /** @type {import('postcss-load-config').Config} */
 const config = {
-  plugins: [require('autoprefixer'), require('@tailwindcss/postcss'), require('postcss-minify')],
+  // Components use standard CSS; the native bundle no longer uses Tailwind.
+  // Do not require packages removed from package.json with the old scaffold.
+  plugins: [],
 };
 
 module.exports = config;

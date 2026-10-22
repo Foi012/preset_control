@@ -25,7 +25,9 @@ defineEmits<{ 'update:modelValue': [value: string] }>();
      tall pill). `appearance: none` makes it a plain 32px box like the other fields. */
   appearance: none;
   -webkit-appearance: none;
-  flex: 1;
+  flex: 1 1 auto;
+  max-height: 32px;
+  min-height: 32px;
   min-width: 0;
   height: 32px;
   box-sizing: border-box;

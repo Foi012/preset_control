@@ -6,18 +6,24 @@
  * gear menu (导入/导出/同步 config), the tab strip, and the in-use/edit body.
  */
 import { ref } from 'vue';
-import { useConsoleStore, useUiStore } from '../store';
+import { flushAutosave, useConsoleStore, useUiStore } from '../store';
 import Dropdown, { type DropdownOption } from '@/ui/Dropdown.vue';
 import EditView from './EditView.vue';
+import PresetWorkbench from './PresetWorkbench.vue';
+import QuickPlans from './QuickPlans.vue';
+import IconButton from '@/ui/IconButton.vue';
+import { useWorkbenchStore } from '../workbench-store';
+const wb = useWorkbenchStore();
+async function enterWorkbench(): Promise<void> { await flushAutosave(); wb.invalidateClean(); wb.enter(); }
 import InUseView from './InUseView.vue';
 
 const ui = useUiStore();
 const consoleStore = useConsoleStore();
 const importInput = ref<HTMLInputElement | null>(null);
 const MENU_OPTIONS: DropdownOption[] = [
-  { value: 'import', label: '导入', icon: 'upload' },
-  { value: 'export', label: '导出', icon: 'download' },
-  { value: 'sync', label: '同步', icon: 'refresh' },
+  { value: 'import', label: '导入控制台设置', icon: 'upload' },
+  { value: 'export', label: '导出控制台设置', icon: 'download' },
+  { value: 'sync', label: '重新读取预设', icon: 'refresh' },
 ];
 
 function exportConfig(): void {
@@ -55,6 +61,8 @@ function runMenuAction(action: string): void {
 
 <template>
   <div class="pet-console">
+    <PresetWorkbench v-if="wb.open" />
+    <template v-else>
     <nav class="pet-console__tabs" aria-label="控制台页面">
       <button
         type="button"
@@ -62,7 +70,7 @@ function runMenuAction(action: string): void {
         :class="{ 'pet-console__tab--on': ui.mode === 'in-use' }"
         @click="ui.mode = 'in-use'"
       >
-        使用
+        快速开关
       </button>
       <button
         type="button"
@@ -70,8 +78,9 @@ function runMenuAction(action: string): void {
         :class="{ 'pet-console__tab--on': ui.mode === 'edit' }"
         @click="ui.mode = 'edit'"
       >
-        编辑
+        快速分组
       </button>
+      <span class="pet-console__space" /><div class="pet-console__utilities"><IconButton name="type" title="文本工作台" @click="enterWorkbench" />
       <Dropdown
         class="pet-console__menu"
         model-value=""
@@ -79,24 +88,24 @@ function runMenuAction(action: string): void {
         variant="icon"
         align="right"
         trigger-icon="settings"
-        title="更多"
+        title="控制台设置"
         @update:model-value="runMenuAction"
       />
+      </div>
       <input ref="importInput" class="pet-console__import" type="file" accept="application/json,.json" @change="importConfig" />
     </nav>
 
+    <QuickPlans v-if="ui.mode === 'in-use'" />
+    <p v-if="wb.error" class="pet-empty" role="alert">{{ wb.error }}</p>
     <div class="pet-console__body">
       <p v-if="consoleStore.configStatus === 'corrupt'" class="pet-corrupt">
-        配置条目损坏且无可用备份，已暂停保存以免覆盖原数据。<br />
-        请检查预设中的 <code>[⚙️CONSOLE-CONFIG]</code>，修复后点顶部「同步」。
+        控制台设置和备份都无法读取，已停止保存，避免覆盖原设置。<br />
+        请从右上角设置菜单导入有效的控制台设置，或修复设置后点击「重新读取预设」。
       </p>
-      <p v-if="!consoleStore.view.regionFound" class="pet-empty">
-        未找到 <code>⚙️CUSTOMIZATION_START / _END</code> 区域。<br />
-        请确认当前预设包含可管理区间。
-      </p>
-      <InUseView v-else-if="ui.mode === 'in-use'" />
+      <InUseView v-if="ui.mode === 'in-use'" />
       <EditView v-else />
     </div>
+    </template>
   </div>
 </template>
 
@@ -145,9 +154,9 @@ function runMenuAction(action: string): void {
   background: var(--pet-color-accent);
   border-radius: var(--pet-radius-pill);
 }
-.pet-console__menu {
-  margin-left: auto;
-}
+.pet-console__space{flex:1}
+.pet-console__utilities{display:flex;align-items:center;gap:var(--pet-space-sm);flex:none}
+.pet-console__menu{flex:none}
 .pet-console__import {
   display: none;
 }

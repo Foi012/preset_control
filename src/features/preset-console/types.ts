@@ -12,10 +12,12 @@ export interface PresetPromptLike {
   name: string;
   enabled: boolean;
   content?: string;
+  /** Native adapter: false means present in catalog, absent from prompt_order. */
+  placed?: boolean;
 }
 
 /** How a section operates on its *plain* entries. */
-export type SectionRule = 'single' | 'multi';
+export type SectionRule = 'single' | 'multi' | 'folder';
 
 export interface ParsedEntry {
   id: string;

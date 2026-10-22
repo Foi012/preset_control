@@ -1,10 +1,11 @@
 # Development
 
 Dev/build notes for 生鱼片工具箱. For the user-facing overview, see [`README.md`](README.md).
-The authoritative design spec for each tool lives in its own `DESIGN.md` — those are the source of
-truth for behaviour and locked decisions:
+Current preset-console behaviour is documented in `FEATURES.md`, architecture in `DESIGN.md`, and
+verification status in `TESTING.md`. Other tools retain their own design specs:
 
 - `src/features/preset-console/DESIGN.md` — 预设控制台
+- `src/features/preset-console/FEATURES.md` — 当前功能、手机交互、保存语义与已知边界
 - `src/features/connection-profiles/DESIGN.md` — 连接档案
 - `src/features/chat-export/DESIGN.md` — 聊天导出
 - `src/features/story-memory/DESIGN.md` — 故事记忆 (**planned** — spec only, not yet built)
@@ -19,12 +20,18 @@ data/<user-handle>/extensions/preset_control/
 
 The root `manifest.json` loads the built root bundle `index.js`.
 
+Local extension loading and acceptance gates: [TESTING.md](TESTING.md). No GitHub push is needed to test a local build.
+
 ## Build
 
 ```sh
 pnpm install
 pnpm build
 ```
+
+The lockfile matches the current native-extension dependency set. PostCSS uses no plugins because
+components use standard CSS; the removed scaffold dependencies are not required. `pnpm-workspace.yaml`
+disables the optional native watcher build. The root bundle is committed for direct extension loading.
 
 ## Checks
 
@@ -36,6 +43,8 @@ pnpm check:config            # 配置读写与校验
 pnpm check:preset-io         # 预设 I/O（Tavern Helper）
 pnpm check:preset-io-native  # 预设 I/O（原生扩展）
 pnpm check:store             # Pinia store
+pnpm check:variables         # 变量 set/get/add、贡献来源和发送文本布局
+pnpm check:workbench         # 草稿、宏来源、方案迁移、复制与预设保存保护
 pnpm check:chat-normalize    # 聊天归一化
 pnpm check:chat-extract      # 提取 / 排除规则
 pnpm check:chat-scan         # 标签扫描
@@ -66,5 +75,5 @@ pnpm build
 - **EPUB packaging** uses a dependency-free store-method ZIP writer (`chat-export/epub.ts`, no JSZip):
   CRC32 + OCF layout, validated with `unzip` / `xmllint`.
 - **Preset config storage** lives in `preset.extensions.presetEasyToggle` (the internal field name is a
-  legacy key — renaming it would orphan existing users' saved configs), with a mirrored backup entry and
-  a corruption guard.
+  legacy key — renaming it would orphan existing users' saved configs), with a mirrored backup and
+  a corruption guard. The older Tavern Helper adapter retains its entry-based storage format.

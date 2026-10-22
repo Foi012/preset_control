@@ -82,7 +82,7 @@ function orderList(current: NativeSettings): NativePromptOrder {
   return list;
 }
 
-function promptToLike(prompt: NativePrompt, enabled: boolean, index: number): PresetPromptLike {
+function promptToLike(prompt: NativePrompt, enabled: boolean, index: number, placed = true): PresetPromptLike {
   return {
     id: prompt.identifier,
     name: prompt.name ?? prompt.identifier,
@@ -90,6 +90,7 @@ function promptToLike(prompt: NativePrompt, enabled: boolean, index: number): Pr
     content: prompt.content ?? '',
     role: prompt.role ?? 'system',
     position: prompt.position ?? { type: 'relative' },
+    placed,
   } as PresetPromptLike;
 }
 
@@ -106,7 +107,7 @@ function readPrompts(current: NativeSettings): PresetPromptLike[] {
 
   const unordered = prompts
     .filter(prompt => !seen.has(prompt.identifier))
-    .map((prompt, offset) => promptToLike(prompt, false, ordered.length + offset));
+    .map((prompt, offset) => promptToLike(prompt, false, ordered.length + offset, false));
   return [...ordered, ...unordered];
 }
 
@@ -127,6 +128,8 @@ function writePrompts(current: NativeSettings, prompts: PresetPromptLike[]): voi
   const byId = new Map((current.prompts ?? []).map(prompt => [prompt.identifier, prompt]));
   const nextPrompts: NativePrompt[] = [];
   const nextOrder: NativePromptOrderEntry[] = [];
+  const oldOrder = orderList(current).order;
+  const orderById = new Map(oldOrder.map(entry => [entry.identifier, entry]));
 
   for (const prompt of prompts) {
     if (managedNames.has(prompt.name)) continue;
@@ -136,10 +139,13 @@ function writePrompts(current: NativeSettings, prompts: PresetPromptLike[]): voi
     native.name = prompt.name;
     native.content = prompt.content ?? '';
     nextPrompts.push(native);
-    nextOrder.push({ identifier: prompt.id, enabled: prompt.enabled });
+    if (prompt.placed !== false) nextOrder.push({ ...orderById.get(prompt.id), identifier: prompt.id, enabled: prompt.enabled });
   }
 
   current.prompts = nextPrompts;
+  // A stale reference is diagnostic data, not permission to delete it on a toggle.
+  const known = new Set(byId.keys());
+  for (const [index, entry] of oldOrder.entries()) if (!known.has(entry.identifier)) nextOrder.splice(Math.min(index, nextOrder.length), 0, entry);
   orderList(current).order = nextOrder;
 }
 

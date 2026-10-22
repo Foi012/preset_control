@@ -1,6 +1,8 @@
 import { createPinia } from 'pinia';
 import { createApp, watch } from 'vue';
 import App from './App.vue';
+import { MOBILE_WORKBENCH_QUERY } from './useMobileWorkbench';
+import { draftDirty, useWorkbenchStore } from './workbench-store';
 import { presetGatewayNative } from './preset-io-native';
 import { configurePresetGateway, flushAutosave, useConsoleStore, useUiStore, type ThemePref } from './store';
 import { emitCssVars, themeByName } from '@/ui/tokens';
@@ -34,11 +36,13 @@ function context(): NativeContext {
 }
 
 function viewport() {
-  return { width: window.innerWidth, height: window.innerHeight };
+  return { width: window.innerWidth, height: Math.min(window.innerHeight, window.visualViewport?.height ?? window.innerHeight), top: window.visualViewport?.offsetTop ?? 0, left: window.visualViewport?.offsetLeft ?? 0 };
 }
 
-function openSize(home = false) {
+function openSize(home = false, workbench = false) {
   const { width, height } = viewport();
+  if (workbench && window.matchMedia(MOBILE_WORKBENCH_QUERY).matches) return { width, height };
+  if (workbench) return { width: Math.min(1320, width - EDGE_PADDING * 2), height: Math.min(height * 0.94, 1000) };
   if (home) {
     return {
       width: Math.min(HOME_WIDTH, width - EDGE_PADDING * 2),
@@ -162,6 +166,7 @@ function init(): void {
   const app = createApp(App).use(pinia);
   const ui = useUiStore(pinia);
   const store = useConsoleStore(pinia);
+  const workbench = useWorkbenchStore(pinia);
   ui.setTheme(loadTheme());
   ui.compact = viewport().width < COMPACT_MAX_WIDTH;
   tokenStyle.textContent = `:host {\n${emitCssVars(themeByName(ui.theme))}\n}`;
@@ -174,8 +179,11 @@ function init(): void {
   type Box = { x: number; y: number; width: number; height: number };
   function frameBox(open: boolean): Box {
     if (open) {
-      const size = openSize(ui.activeTool === 'home');
-      const point = clampPoint(triggerPosition, size.width, size.height);
+      const wide = ui.activeTool === 'preset' && workbench.open;
+      const size = openSize(ui.activeTool === 'home', wide);
+      const point = wide
+        ? { x: viewport().left + (viewport().width - size.width) / 2, y: viewport().top + (viewport().height - size.height) / 2 }
+        : clampPoint(triggerPosition, size.width, size.height);
       return { x: point.x, y: point.y, width: size.width, height: size.height };
     }
     triggerPosition = clampPoint(triggerPosition, CLOSED_SIZE, CLOSED_SIZE);
@@ -235,7 +243,7 @@ function init(): void {
 
   let layoutPrimed = false;
   const stopLayout = watch(
-    () => [ui.open, ui.activeTool] as const,
+    () => [ui.open, ui.activeTool, workbench.open] as const,
     ([open]) => {
       if (!layoutPrimed) {
         layoutPrimed = true;
@@ -284,15 +292,28 @@ function init(): void {
     saveJson(POSITION_KEY, triggerPosition);
   }, 150);
   window.addEventListener('resize', onResize);
+  window.visualViewport?.addEventListener('resize', onResize);
+  window.visualViewport?.addEventListener('scroll', onResize);
 
   const refresh = debounce(() => store.externalReload(), 350);
   const ctx = context();
   const presetEvent = ctx.eventTypes?.OAI_PRESET_CHANGED_AFTER;
   const settingsEvent = ctx.eventTypes?.SETTINGS_UPDATED;
+  const refreshPreview = debounce(() => workbench.refreshContext(), 150);
+  const previewEvents = ['CHAT_CHANGED', 'GENERATION_ENDED', 'MESSAGE_DELETED', 'SETTINGS_UPDATED'].map(key => ctx.eventTypes?.[key]).filter((event): event is string => !!event);
+  for (const event of previewEvents) ctx.eventSource?.on?.(event, refreshPreview);
   if (presetEvent) ctx.eventSource?.on?.(presetEvent, refresh);
   if (settingsEvent) ctx.eventSource?.on?.(settingsEvent, refresh);
 
+  function protectDrafts(event: BeforeUnloadEvent): void {
+    if (!Object.values(workbench.drafts).some(draftDirty)) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }
+  window.addEventListener('beforeunload', protectDrafts);
+
   window.addEventListener('pagehide', () => {
+    window.removeEventListener('beforeunload', protectDrafts);
     stopTheme();
     stopLayout();
     styleObserver.disconnect();
@@ -301,6 +322,9 @@ function init(): void {
     window.removeEventListener('pet-trigger-drag-move', onDragMove);
     window.removeEventListener('pet-trigger-drag-end', onDragEnd);
     window.removeEventListener('resize', onResize);
+    window.visualViewport?.removeEventListener('resize', onResize);
+    window.visualViewport?.removeEventListener('scroll', onResize);
+    for (const event of previewEvents) ctx.eventSource?.removeListener?.(event, refreshPreview);
     if (presetEvent) ctx.eventSource?.removeListener?.(presetEvent, refresh);
     if (settingsEvent) ctx.eventSource?.removeListener?.(settingsEvent, refresh);
     flushAutosave();

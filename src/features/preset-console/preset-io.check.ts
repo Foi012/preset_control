@@ -5,6 +5,7 @@
  */
 import { CONFIG_BACKUP_ENTRY_NAME, CONFIG_ENTRY_NAME, defaultConfig, readConfig } from './config';
 import {
+  createAutoSaver,
   loadView,
   needsConfigMigration,
   saveConfig,
@@ -123,6 +124,24 @@ async function main() {
   check('after migration: backup gone from the placed list', dump().some(p => p.name === CONFIG_BACKUP_ENTRY_NAME), false);
   check('after migration: config in the unplaced list', dumpUnused().some(p => p.name === CONFIG_ENTRY_NAME), true);
   check('after migration: no longer flagged for migration', needsConfigMigration(gateway), false);
+}
+
+// Entering the workbench must wait for a pending quick-panel disk save.
+{
+  const { gateway } = mockGateway([]);
+  let release!: () => void;
+  let completed = false;
+  gateway.persist = () => new Promise<void>(resolve => { release = resolve; });
+  const saver = createAutoSaver(gateway, 60000);
+  saver.schedule();
+  const pending = saver.flush();
+  check('flush exposes the in-flight persistence promise', typeof pending?.then, 'function');
+  pending?.then(() => { completed = true; });
+  await Promise.resolve();
+  check('flush cannot finish before the disk save', completed, false);
+  release();
+  await pending;
+  check('flush finishes when persistence resolves', completed, true);
 }
 
 // --- upsertConfigPrompt falls back to front when region marker absent ------

@@ -6,7 +6,7 @@
  * `.pet-batch__primary`). One radius, one disabled treatment, all from tokens.
  *
  * Variants: `primary` (accent fill), `secondary` (raised surface), `ghost`
- * (transparent outline). Sizes: `md` (default) / `sm`. An optional leading
+ * (transparent outline), `text` (toolbar action without outline). Sizes: `md` (default) / `sm`. An optional leading
  * `icon` (PetIcon name) renders before the slot label.
  */
 import PetIcon from './PetIcon.vue';
@@ -14,7 +14,7 @@ import type { IconName } from './PetIcon.vue';
 
 withDefaults(
   defineProps<{
-    variant?: 'primary' | 'secondary' | 'ghost';
+    variant?: 'primary' | 'secondary' | 'ghost' | 'text';
     size?: 'sm' | 'md';
     icon?: IconName;
     iconRight?: IconName;
@@ -110,6 +110,15 @@ defineEmits<{ click: [event: MouseEvent] }>();
 .pet-btn--ghost:hover:not(:disabled) {
   color: var(--pet-color-text);
   border-color: var(--pet-color-accent);
+}
+
+.pet-btn--text {
+  color: var(--pet-color-text-muted);
+  background: transparent;
+}
+.pet-btn--text:hover:not(:disabled) {
+  color: var(--pet-color-text);
+  background: var(--pet-color-surface-raised);
 }
 
 .pet-btn:disabled {

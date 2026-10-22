@@ -2,11 +2,9 @@
 import { computed, ref } from 'vue';
 import { flattenSectionEntries, flattenSections, useConsoleStore, useUiStore } from '../store';
 import Dropdown from '@/ui/Dropdown.vue';
-import EditContextBar from './EditContextBar.vue';
 import EditFolderNav from './EditFolderNav.vue';
 import EditGroupCard from './EditGroupCard.vue';
 import IconButton from '@/ui/IconButton.vue';
-import ModeArrange from './ModeArrange.vue';
 import type { ResolvedSection } from '../types';
 import { useHideOnScroll } from '../useHideOnScroll';
 
@@ -38,7 +36,7 @@ const editableSections = computed<ResolvedSection[]>(() => {
       id: '__unorganized__',
       source: 'custom',
       parentId: null,
-      name: '未整理',
+      name: '未分组',
       rule: 'multi',
       order: Number.MAX_SAFE_INTEGER,
       pinned: false,
@@ -164,20 +162,17 @@ function moveSelected(targetGroupId: string) {
 </script>
 
 <template>
-  <div class="pet-edit" :class="{ 'pet-edit--batch-visible': batchVisible && !ui.editContextId }">
+  <div class="pet-edit" :class="{ 'pet-edit--batch-visible': batchVisible }">
     <section class="pet-command">
-      <!-- Context chip strip (结构 + mode chips): pinned, never hides. -->
-      <EditContextBar />
       <!-- Tools row: collapses on scroll-down to reclaim space (no overlap). -->
       <div
-        v-if="!ui.editContextId"
         class="pet-command__row"
         :class="{ 'pet-command__row--hidden': commandHidden }"
       >
         <IconButton
           name="menu"
           :active="ui.editNavOpen"
-          :title="ui.editNavOpen ? '隐藏结构' : '显示结构'"
+          :title="ui.editNavOpen ? '隐藏分组列表' : '显示分组列表'"
           @click="ui.editNavOpen = !ui.editNavOpen"
         />
         <input v-model="searchText" class="pet-input" placeholder="搜索条目" />
@@ -189,16 +184,15 @@ function moveSelected(targetGroupId: string) {
         />
         <button
           :class="['pet-toggle', { 'pet-toggle--on': batchLatched }]"
-          title="批量"
+          title="批量选择条目"
           @click="setBatchLatched(!batchLatched)"
         >
-          批量
+          批量选择
         </button>
       </div>
     </section>
 
     <div
-      v-if="!ui.editContextId"
       class="pet-edit__workspace"
       :class="{ 'pet-edit__workspace--nav-open': ui.editNavOpen }"
     >
@@ -214,9 +208,8 @@ function moveSelected(targetGroupId: string) {
         />
       </section>
     </div>
-    <ModeArrange v-else :mode-id="ui.editContextId" />
 
-    <div v-show="batchVisible && !ui.editContextId" class="pet-batch" :class="{ 'pet-batch--active': selectedCount > 0 }">
+    <div v-show="batchVisible" class="pet-batch" :class="{ 'pet-batch--active': selectedCount > 0 }">
       <label class="pet-batch__all">
         <input
           type="checkbox"
@@ -232,7 +225,7 @@ function moveSelected(targetGroupId: string) {
           <IconButton
             name="lock"
             :active="selectedAllAlwaysOn"
-            :title="selectedAllAlwaysOn ? '取消常驻' : '设为常驻'"
+            :title="selectedAllAlwaysOn ? '允许关闭' : '锁定开启'"
             @click="toggleSelectedAlwaysOn"
           />
           <IconButton
@@ -241,7 +234,7 @@ function moveSelected(targetGroupId: string) {
             :title="selectedAllHidden ? '取消隐藏' : '隐藏'"
             @click="toggleSelectedHidden"
           />
-          <IconButton name="type" title="输入框" @click="toggleSelectedInput" />
+          <IconButton name="type" title="切换输入框显示" @click="toggleSelectedInput" />
           <Dropdown
             v-model="batchTargetGroupId"
             :options="groupOptions"
@@ -273,8 +266,8 @@ function moveSelected(targetGroupId: string) {
   padding: 0;
 }
 /* Tools row: collapses on scroll-down to reclaim space (flow, no overlap → no masking
-   background). EditContextBar above it stays pinned. Shared behaviour with in-use /
-   ModeArrange via useHideOnScroll; see useHideOnScroll.ts. */
+   background). The structure tree stays available. Shared behaviour with in-use /
+   the other list views via useHideOnScroll; see useHideOnScroll.ts. */
 .pet-command__row {
   display: flex;
   align-items: center;

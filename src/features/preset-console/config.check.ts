@@ -1,3 +1,4 @@
+import { canPlaceGroup, validGroupAncestry, removeCustomGroup } from './group-tree';
 /**
  * Lightweight check for the config layer (read / validate / merge) against the
  * trimmed fixture. Mirrors {@link ./parser.check.ts}; no test runner is configured.
@@ -45,6 +46,8 @@ const stored: Config = {
   scenarios: [
     { id: 's1', name: 'NSFW', groupIds: [], layout: [], selections: { 'de1a5ffc-gpt': true }, snapshots: [] },
   ],
+  plans: [],
+  plansMigrated: false,
   ui: { theme: 'dark' },
 };
 const withConfig: PresetPromptLike[] = [
@@ -258,10 +261,20 @@ const tooDeep: Config = {
 };
 const tview = resolveView(parse, tooDeep);
 check(
-  'depth guard keeps grandchild top-level',
-  tview.sections.some(s => s.id === GRAND),
+  'three-level tree keeps grandchild under child',
+  tview.sections.find(s => s.id === POV)?.children.find(s => s.id === CHILD)?.children.some(s => s.id === GRAND),
   true,
 );
+
+const links = [{ id: 'a', parentId: null }, { id: 'b', parentId: 'a' }, { id: 'c', parentId: 'b' }, { id: 'd', parentId: null }];
+check('three-level guard rejects fourth level', canPlaceGroup(links, 'd', 'c'), false);
+check('tree guard rejects cycles', canPlaceGroup(links, 'a', 'c'), false);
+check('subtree movement preserves total depth', canPlaceGroup(links, 'a', 'd'), false);
+check('two-level subtree can move under a root', canPlaceGroup(links, 'b', 'd'), true);
+check('grandchild can move out', canPlaceGroup(links, 'c', null), true);
+check('corrupt cycle has no valid ancestry', validGroupAncestry('a', new Map([['a', 'b'], ['b', 'a']])), false);
+const fourth = resolveView(parse, { ...tooDeep, customGroups: [...tooDeep.customGroups, { ...tooDeep.customGroups[0], id: 'fourth', parentId: GRAND }] });
+check('stored fourth level falls back to root without losing it', fourth.sections.some(s => s.id === 'fourth'), true);
 
 // Dangling assignment (group deleted) falls back to native group.
 const dangling: Config = { ...dflt, entryMeta: { [POV2]: { groupId: 'ghost' } } };
@@ -271,6 +284,22 @@ check(
   dview.sections.find(s => s.id === POV)!.entries.some(e => e.id === POV2),
   true,
 );
+
+// Deleting a virtual container preserves children, text states and historical scopes.
+const deleted = defaultConfig();
+const makeGroup = (id: string, parentId?: string) => ({ id, name: id, parentId, rule: 'multi' as const, order: 0, pinned: false, hidden: false, required: false, collapsed: false });
+deleted.customGroups = [makeGroup('parent'), makeGroup('middle', 'parent'), makeGroup('leaf', 'middle')];
+deleted.entryMeta = { e: { groupId: 'middle', alwaysOn: true } };
+deleted.scenarios = [{ id: 'mode', name: 'mode', groupIds: ['parent', 'middle', 'leaf'], layout: [{ groupId: 'middle', order: 0 }, { groupId: 'leaf', parentId: 'middle', order: 1 }], snapshots: [{ id: 'snap', name: 'scope', selections: { e: false } }] }];
+check('custom group deletes', removeCustomGroup(deleted, 'middle'), true);
+check('child reparents to grandparent', deleted.customGroups.find(g => g.id === 'leaf')?.parentId, 'parent');
+check('entry keeps overrides and moves to parent', deleted.entryMeta.e, { groupId: 'parent', alwaysOn: true });
+check('mode drops deleted membership', deleted.scenarios[0].groupIds, ['parent', 'leaf']);
+check('mode child moves to deleted group layout parent', deleted.scenarios[0].layout[0].parentId, undefined);
+check('deletion preserves snapshot exact scope and OFF value', deleted.scenarios[0].snapshots[0].selections, { e: false });
+removeCustomGroup(deleted, 'parent');
+check('top-level deletion clears assignment, keeps override', deleted.entryMeta.e, { alwaysOn: true });
+check('native group cannot be deleted as a virtual group', removeCustomGroup(deleted, POV), false);
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

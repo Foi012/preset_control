@@ -105,7 +105,10 @@ export function loadConfigSafe(gateway: PresetGateway): ConfigReadResult {
 export async function setEntriesEnabled(gateway: PresetGateway, selections: Record<string, boolean>): Promise<void> {
   await gateway.mutate(({ prompts }) => {
     for (const prompt of prompts) {
-      if (prompt.id in selections) prompt.enabled = selections[prompt.id];
+      if (prompt.id in selections) {
+        prompt.enabled = selections[prompt.id];
+        if (prompt.enabled && prompt.placed === false) prompt.placed = true;
+      }
     }
   });
 }
@@ -196,7 +199,7 @@ function newPromptId(): string {
  */
 export function createAutoSaver(gateway: PresetGateway, wait = 800) {
   const persist = debounce(() => {
-    gateway.persist().catch(error => console.warn('[preset-easy-toggle] 磁盘保存失败', error));
+    return gateway.persist().catch(error => console.warn('[preset-easy-toggle] 磁盘保存失败', error));
   }, wait);
   return {
     schedule: () => persist(),

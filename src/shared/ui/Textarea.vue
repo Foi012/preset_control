@@ -5,10 +5,11 @@
  * `.pet-tile__textarea` and 连接档案's 附加参数 field), so the look (border, focus ring,
  * vertical resize) lives in one place instead of drifting.
  *
- * Commits on `change` (blur/enter-out) like both original call sites. Non-declared attrs
+ * Commits on `change` by default. Draft editors can opt into `commitOnInput` so
+ * previews update while typing without writing to the host. Non-declared attrs
  * (rows, placeholder, readonly, spellcheck…) fall through to the native textarea.
  */
-withDefaults(defineProps<{ modelValue: string; invalid?: boolean }>(), { invalid: false });
+const props = withDefaults(defineProps<{ modelValue: string; invalid?: boolean; commitOnInput?: boolean }>(), { invalid: false, commitOnInput: false });
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 
 function commit(event: Event): void {
@@ -21,7 +22,8 @@ function commit(event: Event): void {
     class="pet-textarea"
     :class="{ 'pet-textarea--invalid': invalid }"
     :value="modelValue"
-    @change="commit"
+    @input="props.commitOnInput && commit($event)"
+    @change="!props.commitOnInput && commit($event)"
   />
 </template>
 

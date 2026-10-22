@@ -135,7 +135,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
   transform: rotate(180deg);
 }
 .pet-dd--field {
-  flex: 0 1 180px;
+  flex: 0 1 auto;
   min-width: 144px;
 }
 .pet-dd--field .pet-dd__button {

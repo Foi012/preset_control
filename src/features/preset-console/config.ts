@@ -1,3 +1,4 @@
+import { validGroupAncestry } from './group-tree';
 /**
  * Config layer: the stored behaviour for the console.
  *
@@ -53,7 +54,7 @@ const GroupSchema = z.object({
   headerId: z.string(),
   name: z.string().optional(),
   parentId: z.string().optional(),
-  rule: z.enum(['single', 'multi']),
+  rule: z.enum(['single', 'multi', 'folder']),
   /** Display order; pinned groups still sort ahead of unpinned. */
   order: z.number(),
   pinned: z.boolean().default(false),
@@ -70,7 +71,7 @@ const CustomGroupSchema = z.object({
   id: z.string(),
   name: z.string(),
   parentId: z.string().optional(),
-  rule: z.enum(['single', 'multi']).default('multi'),
+  rule: z.enum(['single', 'multi', 'folder']).default('multi'),
   order: z.number(),
   pinned: z.boolean().default(false),
   hidden: z.boolean().default(false),
@@ -99,7 +100,7 @@ const EntryMetaSchema = z.object({
  * `snapshots[]`; legacy `selections` is retained so old configs surface as a
  * default snapshot until the user creates explicit ones.
  */
-/** A group's placement *within a mode*: its own order + optional parent (depth ≤ 2). */
+/** A group's placement *within a mode*: its own order + optional parent (depth ≤ 3). */
 const ModeGroupSchema = z.object({
   groupId: z.string(),
   order: z.number(),
@@ -138,6 +139,11 @@ export const ConfigSchema = z.object({
   customGroups: z.array(CustomGroupSchema).default([]),
   entryMeta: z.record(z.string(), EntryMetaSchema).default({}),
   scenarios: z.array(ScenarioSchema).default([]),
+  plans: z.array(z.object({
+    id: z.string(), name: z.string(), scope: z.enum(['all', 'partial']),
+    selections: z.record(z.string(), z.boolean()),
+  })).default([]),
+  plansMigrated: z.boolean().default(false),
   ui: z.object({ theme: z.string().default('dark') }).prefault({}),
 });
 
@@ -303,7 +309,7 @@ export function resolveView(parse: ParseResult, config: Config): ResolvedView {
       order: o?.order ?? index,
       pinned: o?.pinned ?? false,
       hidden: o?.hidden ?? false,
-      required: o?.required ?? false,
+      required: o?.rule === 'folder' ? false : o?.required ?? false,
       collapsed: o?.collapsed ?? false,
       entries: buckets.get(section.headerId) ?? [],
       children: [],
@@ -322,7 +328,7 @@ export function resolveView(parse: ParseResult, config: Config): ResolvedView {
       order: group.order,
       pinned: group.pinned,
       hidden: group.hidden,
-      required: group.required,
+      required: group.rule === 'folder' ? false : group.required,
       collapsed: group.collapsed,
       entries: buckets.get(group.id) ?? [],
       children: [],
@@ -339,11 +345,11 @@ export function resolveView(parse: ParseResult, config: Config): ResolvedView {
 
   const byId = new Map(sections.map(section => [section.id, section]));
   const topLevel: WorkingSection[] = [];
+  const parents = new Map(sections.map(s => [s.id, s._parentId]));
   for (const section of sections) {
     const parent = section._parentId ? byId.get(section._parentId) : undefined;
-    // Only honour parentId when the referenced parent exists and is itself top-level.
-    // This caps nesting at two levels and breaks cycles/corrupt stored values.
-    if (parent && parent.id !== section.id && !parent._parentId) {
+    // Honour valid three-level ancestry; cycles/missing parents fall back to roots.
+    if (parent && validGroupAncestry(section.id, parents)) {
       section.parentId = parent.id;
       parent.children.push(section);
     } else {
@@ -352,7 +358,7 @@ export function resolveView(parse: ParseResult, config: Config): ResolvedView {
   }
 
   topLevel.sort(byGroupOrder);
-  for (const section of topLevel) section.children.sort(byGroupOrder);
+  for (const section of sections) section.children.sort(byGroupOrder);
 
   const stripInternal = ({ _index, _parentId, ...section }: WorkingSection): ResolvedSection => ({
     ...section,

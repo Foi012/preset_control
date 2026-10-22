@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useUiStore } from './store';
+import { useWorkbenchStore } from './workbench-store';
 import ChatExport from '../chat-export/ChatExport.vue';
 import ConnectionProfiles from '../connection-profiles/ConnectionProfiles.vue';
 import IconButton from '@/ui/IconButton.vue';
@@ -9,6 +10,7 @@ import ToolboxHome from './components/ToolboxHome.vue';
 import Trigger from './components/Trigger.vue';
 
 const ui = useUiStore();
+const wb = useWorkbenchStore();
 
 const TOOL_TITLE: Record<string, string> = {
   home: '生鱼片工具箱',
@@ -38,8 +40,8 @@ function emitDragEvent(name: string, event: PointerEvent): void {
   />
 
   <!-- Open: the toolbox shell — header + the active tool fills the body. -->
-  <section v-else class="pet-panel" :class="{ 'pet-panel--home': ui.activeTool === 'home' }">
-    <header v-if="ui.activeTool !== 'home'" class="pet-panel__bar">
+  <section v-else class="pet-panel" :class="{ 'pet-panel--home': ui.activeTool === 'home', 'pet-panel--workbench': ui.activeTool === 'preset' && wb.open }">
+    <header v-if="ui.activeTool !== 'home' && !(ui.activeTool === 'preset' && wb.open)" class="pet-panel__bar">
       <IconButton
         v-if="ui.activeTool !== 'home'"
         name="arrow-left"
@@ -47,12 +49,14 @@ function emitDragEvent(name: string, event: PointerEvent): void {
         @click="ui.setActiveTool('home')"
       />
       <span class="pet-panel__title">{{ title }}</span>
+      <div class="pet-panel__utilities">
       <IconButton
         :name="ui.theme === 'dark' ? 'sun' : 'moon'"
         :title="ui.theme === 'dark' ? '亮色' : '暗色'"
         @click="ui.toggleTheme()"
       />
       <IconButton name="close" title="收起" @click="ui.open = false" />
+      </div>
     </header>
 
     <ToolboxHome v-if="ui.activeTool === 'home'" />
@@ -96,6 +100,7 @@ function emitDragEvent(name: string, event: PointerEvent): void {
   background: transparent;
   backdrop-filter: blur(var(--pet-effect-glass-blur));
 }
+.pet-panel__utilities { display:flex; align-items:center; gap:var(--pet-space-sm); flex:none; }
 .pet-panel__title {
   flex: 1 1 auto;
   min-width: 0;
@@ -105,4 +110,5 @@ function emitDragEvent(name: string, event: PointerEvent): void {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+@media(max-width:767px), (max-width:1023px) and (pointer:coarse){.pet-panel--workbench{border-radius:0;border:0;background:var(--pet-color-surface);padding-top:env(safe-area-inset-top,0px)}.pet-panel--workbench :deep(button){touch-action:manipulation}}
 </style>

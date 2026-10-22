@@ -62,6 +62,16 @@ async function main() {
   check('persist saves prompt_order into selected preset', saved.prompt_order[0].order[0].identifier, 'b');
   check('persist saves extensions into selected preset', saved.extensions.presetEasyToggle.config.includes('Native'), true);
 
+  settings.prompts.push({ identifier: 'unplaced', name: 'Unplaced', content: 'spare', role: 'system' });
+  settings.prompt_order[0].order.push({ identifier: 'missing', enabled: false });
+  (settings.prompt_order[0].order[0] as any).custom = 'preserve';
+  await setEntriesEnabled(gateway, { a: false });
+  check('ordinary toggle keeps unplaced entry out of prompt_order', settings.prompt_order[0].order.some(e => e.identifier === 'unplaced'), false);
+  check('ordinary toggle preserves stale order reference', settings.prompt_order[0].order.some(e => e.identifier === 'missing'), true);
+  check('ordinary toggle preserves native order metadata', (settings.prompt_order[0].order[0] as any).custom, 'preserve');
+  await setEntriesEnabled(gateway, { unplaced: true });
+  check('explicit enable places an unplaced entry', settings.prompt_order[0].order.some(e => e.identifier === 'unplaced' && e.enabled), true);
+
   if (failures) process.exit(1);
   console.log('\nALL PASS');
 }

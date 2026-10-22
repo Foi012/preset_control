@@ -33,7 +33,7 @@ const visibleChildren = computed(() => props.section.children.filter(child => !c
 // Every group with something togglable gets a master (whole-group on/off), not just
 // folders/children — only all-locked groups (no plain entries, no children) skip it.
 const showMasterToggle = computed(
-  () => plainDescendants(props.section).length > 0 || props.section.children.length > 0,
+  () => props.section.rule !== 'folder' && (plainDescendants(props.section).length > 0 || props.section.children.length > 0),
 );
 const masterState = computed(() => folderState(props.section));
 const masterAffordance = computed(() => (props.parentRule === 'single' ? 'radio' : 'checkbox'));
@@ -49,7 +49,7 @@ const summary = computed(() => {
   const on = flattenSectionEntries(props.section)
     .filter(e => e.enabled)
     .map(e => entryDisplayName(e.name));
-  return on.length ? on.join('、') : '未选择';
+  return on.length ? on.join('、') : '全部关闭';
 });
 
 /**
@@ -93,7 +93,7 @@ function toggleMaster(): void {
       <span class="pet-section__badges">
         <span v-if="section.pinned" class="pet-section__pin" title="已置顶"><PetIcon name="pin" /></span>
         <span :class="['pet-rule', `pet-rule--${section.rule}`]">{{ ruleLabel }}</span>
-        <span v-if="section.required" class="pet-rule pet-rule--required" title="必开">必开</span>
+        <span v-if="section.required" class="pet-rule pet-rule--required" title="至少开启一项">至少开启一项</span>
       </span>
     </header>
     <p v-if="section.collapsed" class="pet-section__summary" @click="store.toggleGroupCollapsed(section.id)">
@@ -101,7 +101,7 @@ function toggleMaster(): void {
     </p>
     <div v-else class="pet-section__body">
       <button v-if="revealNeeded" type="button" class="pet-section__reveal" @click="ui.showHidden = true">
-        当前选择已隐藏 · 点击显示
+        已开启的条目被隐藏了 · 点击显示
       </button>
       <div v-if="visibleEntries.length" class="pet-section__grid">
         <EntryRow v-for="entry in visibleEntries" :key="entry.id" :section="section" :entry="entry" />

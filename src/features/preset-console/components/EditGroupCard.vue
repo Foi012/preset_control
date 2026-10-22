@@ -10,13 +10,6 @@ const props = defineProps<{
   section: ResolvedSection;
   selectedEntryIds?: string[];
   nested?: boolean;
-  /**
-   * When set, the card renders the **mode** variant: the same group header + entry list
-   * as 结构, but read-only (no entry checkboxes, no per-entry/group settings) plus a
-   * 移出此模式 action. Reorder/nest live in the side nav, exactly like 结构 — so 模式 is a
-   * read-only mirror of the structure surface rather than a separate control language.
-   */
-  mode?: { id: string };
 }>();
 const emit = defineEmits<{
   toggleEntrySelected: [entryId: string, checked: boolean];
@@ -26,8 +19,8 @@ const ui = useUiStore();
 
 const isUnorganized = computed(() => props.section.id === '__unorganized__');
 const REQUIRED_OPTIONS = [
-  { value: 'required', label: '必开' },
-  { value: 'optional', label: '可选' },
+  { value: 'required', label: '至少开启一项' },
+  { value: 'optional', label: '允许全部关闭' },
 ];
 const RULE_OPTIONS = [
   { value: 'single', label: '单选' },
@@ -36,7 +29,7 @@ const RULE_OPTIONS = [
 
 // 未整理 has no config record, so its collapse state lives in the UI store; real groups persist it.
 const isCollapsed = computed(() => (isUnorganized.value ? ui.unorganizedCollapsed : props.section.collapsed));
-// Group config (rule / required / order / pin / hide / delete) is tucked behind a gear
+// Less common group settings stay behind the gear; deletion is visible in the header.
 // so the default card is just chevron · name · count — far less to scan per group.
 const showSettings = ref(false);
 
@@ -65,44 +58,6 @@ function setAllSelected(checked: boolean): void {
 
 <template>
   <section
-    v-if="mode"
-    :id="`pet-egroup-${section.id}`"
-    class="pet-egroup pet-egroup--mode"
-    :class="{ 'pet-egroup--nested': nested, 'pet-egroup--hidden': section.hidden, 'pet-egroup--collapsed': isCollapsed }"
-  >
-    <header class="pet-egroup__head">
-      <div class="pet-egroup__line pet-egroup__line--title">
-        <IconButton
-          class="pet-egroup__disclosure"
-          :class="{ 'pet-egroup__disclosure--collapsed': isCollapsed }"
-          name="chevron-down"
-          :title="isCollapsed ? '展开' : '收起'"
-          @click="toggleCollapsed"
-        />
-        <span class="pet-egroup__name pet-egroup__name--static">{{ section.name }}</span>
-        <span class="pet-egroup__metas">
-          <span class="pet-egroup__meta">{{ section.entries.length }} 项</span>
-          <span :class="['pet-badge', `pet-badge--${section.rule}`]">{{ section.rule === 'single' ? '单选' : '多选' }}</span>
-          <span :class="['pet-badge', section.required ? 'pet-badge--req-on' : 'pet-badge--req-off']">{{
-            section.required ? '必开' : '可选'
-          }}</span>
-        </span>
-        <IconButton name="close" title="移出" @click="store.removeGroupFromMode(mode.id, section.id)" />
-      </div>
-    </header>
-    <div v-show="!isCollapsed" class="pet-egroup__body">
-      <div v-if="section.entries.length" class="pet-egroup__grid">
-        <EntryRow v-for="entry in section.entries" :key="entry.id" :section="section" :entry="entry" readonly />
-      </div>
-      <p v-else class="pet-egroup__empty">此分组没有条目。</p>
-      <div v-if="section.children.length" class="pet-egroup__children">
-        <EditGroupCard v-for="child in section.children" :key="child.id" :section="child" :mode="mode" nested />
-      </div>
-    </div>
-  </section>
-
-  <section
-    v-else
     :id="`pet-egroup-${section.id}`"
     class="pet-egroup"
     :class="{
@@ -129,7 +84,7 @@ function setAllSelected(checked: boolean): void {
               section.rule === 'single' ? '单选' : '多选'
             }}</span>
             <span :class="['pet-badge', section.required ? 'pet-badge--req-on' : 'pet-badge--req-off']">{{
-              section.required ? '必开' : '可选'
+              section.required ? '至少开启一项' : '允许全部关闭'
             }}</span>
           </template>
         </span>
@@ -140,16 +95,17 @@ function setAllSelected(checked: boolean): void {
           :active="showSettings"
           @click="showSettings = !showSettings"
         />
+        <IconButton v-if="!isUnorganized && section.source === 'custom'" name="trash" :title="`删除分组 ${section.name}`" danger @click="store.deleteGroup(section.id)" />
       </div>
 
       <p v-if="isUnorganized" class="pet-egroup__note">
-        这些条目还未加入任何分组，不会出现在「使用」页。勾选后移动到分组即可纳入管理。
+        这些条目还没有分组。勾选后选择「移动到分组」，即可在快速面板中使用。
       </p>
       <div v-else-if="showSettings" class="pet-egroup__settings">
         <Segmented
-          :model-value="section.rule"
+          :model-value="section.rule === 'folder' ? 'multi' : section.rule"
           :options="RULE_OPTIONS"
-          @update:model-value="store.setGroupRule(section.id, $event as 'single' | 'multi')"
+          @update:model-value="store.setGroupRule(section.id, $event as 'single' | 'multi' | 'folder')"
         />
         <Segmented
           :model-value="section.required ? 'required' : 'optional'"
@@ -169,13 +125,7 @@ function setAllSelected(checked: boolean): void {
             :active="section.hidden"
             @click="store.toggleGroupHidden(section.id)"
           />
-          <IconButton
-            v-if="section.source === 'custom'"
-            name="trash"
-            title="删除"
-            danger
-            @click="store.deleteGroup(section.id)"
-          />
+
         </div>
       </div>
     </header>
@@ -190,7 +140,7 @@ function setAllSelected(checked: boolean): void {
               :disabled="!section.entries.length"
               @change="setAllSelected(($event.target as HTMLInputElement).checked)"
             />
-            本组全选
+            选择本组全部条目
           </label>
         </div>
 
@@ -206,7 +156,7 @@ function setAllSelected(checked: boolean): void {
           <IconButton
             name="lock"
             :active="entry.alwaysOn"
-            :title="entry.alwaysOn ? '取消常驻' : '设为常驻'"
+            :title="entry.alwaysOn ? '允许关闭' : '锁定开启'"
             @click="store.toggleEntryAlwaysOn(entry.id)"
           />
           <IconButton
@@ -216,7 +166,7 @@ function setAllSelected(checked: boolean): void {
             @click="store.toggleEntryHidden(entry.id)"
           />
         </div>
-        <p v-if="!section.entries.length" class="pet-egroup__empty">空分组。打开多选后选择条目，再移动到此分组。</p>
+        <p v-if="!section.entries.length" class="pet-egroup__empty">这个分组还是空的。点击「批量选择」，勾选条目后移动到这里。</p>
       </div>
 
       <div v-if="section.children.length" class="pet-egroup__children">
@@ -235,6 +185,7 @@ function setAllSelected(checked: boolean): void {
 
 <style scoped>
 .pet-egroup {
+  container: pet-group-card / inline-size;
   background: transparent;
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--pet-color-border), transparent 35%);
@@ -299,8 +250,8 @@ function setAllSelected(checked: boolean): void {
   display: flex;
   align-items: center;
   gap: var(--pet-space-xs);
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  overflow: visible;
   padding: var(--pet-space-xs) 0 0;
   border-radius: var(--pet-radius-sm);
   background: transparent;
@@ -312,7 +263,7 @@ function setAllSelected(checked: boolean): void {
   transform: rotate(-90deg);
 }
 /* Right-side cluster: entry count + rule/required badges grouped together, so every
-   group header (in-use / 结构 / 模式) reads title …flex… [count + badges] [action]. */
+   group header (quick switches / quick grouping) reads title …flex… [count + badges] [action]. */
 .pet-egroup__metas {
   display: inline-flex;
   flex: none;
@@ -332,29 +283,6 @@ function setAllSelected(checked: boolean): void {
 }
 .pet-egroup__name:hover:not([readonly]) {
   border-color: var(--pet-color-border);
-}
-/* Mode variant: name is a static label (reorder/nest live in the side nav). */
-.pet-egroup__name--static {
-  flex: 1;
-  padding: var(--pet-space-xxs) var(--pet-space-xs);
-  border-color: transparent;
-  background: transparent;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pet-egroup--mode .pet-egroup__line--title {
-  gap: var(--pet-space-xs);
-}
-.pet-egroup--mode .pet-egroup__children {
-  padding-top: var(--pet-space-sm);
-}
-/* Mode variant: entries render as the in-use read-only tile grid for readability. */
-.pet-egroup__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: var(--pet-space-sm);
-  padding: var(--pet-space-sm) 0;
 }
 .pet-egroup__name:focus {
   outline: none;
@@ -437,5 +365,11 @@ function setAllSelected(checked: boolean): void {
   padding: var(--pet-space-sm) 0;
   font-size: var(--pet-font-size-xs);
   color: var(--pet-color-text-faint);
+}
+/* Keep names and actions visible when clearer rule labels need a second line. */
+@container pet-group-card (max-width: 300px) {
+  .pet-egroup__line--title { flex-wrap: wrap; }
+  .pet-egroup__metas { order: 1; flex-basis: 100%; flex-wrap: wrap; padding-left: 28px; box-sizing: border-box; }
+  .pet-egroup__name { min-width: 8ch; }
 }
 </style>

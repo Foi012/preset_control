@@ -1,3 +1,4 @@
+import { canPlaceGroup, removeCustomGroup } from './group-tree';
 /**
  * Pinia stores for the console (step 4 vertical slice).
  *
@@ -24,7 +25,7 @@ import {
   type PresetGateway,
 } from './preset-io';
 import { CONFIG_BACKUP_ENTRY_NAME, CONFIG_ENTRY_NAME, ConfigSchema, defaultConfig, serializeConfig, type ConfigStatus } from './config';
-import type { ModeGroupLayout, ModeSnapshot, ResolvedEntry, ResolvedScenario, ResolvedSection, ResolvedView } from './types';
+import type { ResolvedEntry, ResolvedSection, ResolvedView } from './types';
 
 let gateway: PresetGateway = tavernGateway();
 let autosaver = createAutoSaver(gateway);
@@ -36,8 +37,8 @@ export function configurePresetGateway(nextGateway: PresetGateway): void {
 }
 
 /** Flush any pending disk save (call on unload). */
-export function flushAutosave(): void {
-  autosaver.flush();
+export function flushAutosave(): Promise<void> | undefined {
+  return autosaver.flush();
 }
 
 const EMPTY_VIEW: ResolvedView = {
@@ -48,14 +49,6 @@ const EMPTY_VIEW: ResolvedView = {
   scenarios: [],
   ui: { theme: 'dark' },
 };
-
-const LEGACY_SNAPSHOT_ID = '__legacy_default__';
-
-export function snapshotsOfMode(mode: Pick<ResolvedScenario, 'snapshots' | 'selections'>): ModeSnapshot[] {
-  return mode.snapshots.length
-    ? mode.snapshots
-    : [{ id: LEGACY_SNAPSHOT_ID, name: '默认', selections: mode.selections, legacy: true }];
-}
 
 /**
  * Whether an entry belongs in the *curated* in-use view (reveal toggle off):
@@ -258,9 +251,9 @@ export const useConsoleStore = defineStore('pet-console', () => {
     if (configStatus.value === lastNotifiedStatus) return;
     lastNotifiedStatus = configStatus.value;
     if (configStatus.value === 'corrupt') {
-      toastr.error('配置条目损坏且无可用备份，已暂停保存以免覆盖原数据。请检查预设中的 [⚙️CONSOLE-CONFIG]。', '配置读取失败');
+      toastr.error('控制台设置和备份都无法读取，已停止保存，避免覆盖原设置。请从设置菜单导入有效的控制台设置。', '无法读取控制台设置');
     } else if (configStatus.value === 'recovered') {
-      toastr.warning('主配置无法读取，已从备份恢复；下次保存会自动修复。');
+      toastr.warning('控制台设置已从备份恢复。下次保存时会修复原设置。');
     }
   }
 
@@ -318,7 +311,7 @@ export const useConsoleStore = defineStore('pet-console', () => {
       reload();
       markSelfWrite();
       autosaver.schedule();
-      toastr.info(`已自动开启必开分组：${fixed.join('、')}`);
+      toastr.info(`已为以下分组开启条目，以满足至少开启一项的要求：${fixed.join('、')}`);
     } catch (error) {
       console.error('[preset-easy-toggle] 必开自动开启失败', error);
     } finally {
@@ -353,7 +346,7 @@ export const useConsoleStore = defineStore('pet-console', () => {
     // Never overwrite a corrupt-but-recoverable primary entry with the in-memory
     // defaults we fell back to — that would destroy the user's only copy.
     if (configStatus.value === 'corrupt') {
-      toastr.error('配置已损坏，已阻止保存以保护现有数据。');
+      toastr.error('控制台设置无法读取，暂时不能保存，以免覆盖原设置。');
       return Promise.resolve();
     }
     return apply(() => saveConfig(gateway, plain(config.value)));
@@ -409,19 +402,19 @@ export const useConsoleStore = defineStore('pet-console', () => {
     try {
       raw = JSON.parse(json);
     } catch {
-      toastr.error('请选择有效的 JSON 配置文件。', '导入失败');
+      toastr.error('无法读取这个文件。请选择导出的控制台设置 JSON 文件。', '导入失败');
       return;
     }
 
     const imported = parseImportConfig(raw);
     if (!imported) {
-      toastr.error('文件不是有效的控制台配置或含控制台配置的预设。', '导入失败');
+      toastr.error('这个文件没有可用的控制台设置。请选择导出的设置文件，或包含控制台设置的预设文件。', '导入失败');
       return;
     }
 
     config.value = imported;
     configStatus.value = 'ok';
-    await apply(() => saveConfig(gateway, plain(config.value)), '已导入配置');
+    await apply(() => saveConfig(gateway, plain(config.value)), '已导入控制台设置');
     await enforceRequired();
   }
 
@@ -468,10 +461,11 @@ export const useConsoleStore = defineStore('pet-console', () => {
     return undefined;
   }
 
-  function setGroupRule(id: string, rule: 'single' | 'multi'): Promise<void> | void {
+  function setGroupRule(id: string, rule: 'single' | 'multi' | 'folder'): Promise<void> | void {
     const group = groupRecord(id);
     if (!group) return;
     group.rule = rule;
+    if (rule === 'folder') group.required = false;
     return commitConfig();
   }
 
@@ -505,7 +499,7 @@ export const useConsoleStore = defineStore('pet-console', () => {
 
   /**
    * Collapse or expand groups in one write (the panel-level control). Pass `ids` to
-   * scope it to a subset (e.g. a mode's groups); omit for every real group.
+   * scope it to a subset of groups; omit for every real group.
    */
   function setAllCollapsed(collapsed: boolean, ids?: string[]): Promise<void> | void {
     const scope = ids ? new Set(ids) : null;
@@ -561,10 +555,11 @@ export const useConsoleStore = defineStore('pet-console', () => {
   function outdentGroup(id: string): Promise<void> | void {
     const section = sectionById(id);
     if (!section || section.parentId === null) return;
-    const top = orderedSections().filter(s => s.parentId === null);
-    const parentIndex = top.findIndex(s => s.id === section.parentId);
-    const afterId = top[parentIndex + 1]?.id ?? null;
-    return placeGroup(id, null, afterId);
+    const parent = sectionById(section.parentId);
+    const grandparent = parent?.parentId ? sectionById(parent.parentId) : undefined;
+    const siblings = grandparent ? grandparent.children : orderedSections().filter(s => s.parentId === null);
+    const parentIndex = siblings.findIndex(s => s.id === section.parentId);
+    return placeGroup(id, parent?.parentId ?? null, siblings[parentIndex + 1]?.id ?? null);
   }
 
   function setGroupParent(id: string, parentId: string | null): Promise<void> | void {
@@ -572,7 +567,7 @@ export const useConsoleStore = defineStore('pet-console', () => {
     const group = groupRecord(id);
     if (!section || !group) return;
     const parent = parentId ? sectionById(parentId) : undefined;
-    if (parentId && (!parent || parent.id === id || parent.parentId || section.children.length)) return;
+    if (!canPlaceGroup(flattenSections(view.value.sections), id, parentId)) return;
     group.parentId = parent?.id;
     return commitConfig();
   }
@@ -582,7 +577,7 @@ export const useConsoleStore = defineStore('pet-console', () => {
     const group = groupRecord(id);
     if (!section || !group) return;
     const parent = parentId ? sectionById(parentId) : undefined;
-    if (parentId && (!parent || parent.id === id || parent.parentId || section.children.length)) return;
+    if (!canPlaceGroup(flattenSections(view.value.sections), id, parentId)) return;
 
     group.parentId = parent?.id;
     const siblings = (parent ? parent.children : view.value.sections)
@@ -620,14 +615,7 @@ export const useConsoleStore = defineStore('pet-console', () => {
 
   /** Delete a custom group; its entries fall back to their native scaffold group. */
   function deleteGroup(id: string): Promise<void> | void {
-    if (!config.value.customGroups.some(g => g.id === id)) return; // header groups aren't deletable
-    config.value.customGroups = config.value.customGroups.filter(g => g.id !== id);
-    for (const [entryId, meta] of Object.entries(config.value.entryMeta)) {
-      if (meta.groupId === id) {
-        meta.groupId = undefined;
-        pruneEntryMeta(entryId);
-      }
-    }
+    if (!removeCustomGroup(config.value, id)) return;
     return commitConfig();
   }
 
@@ -743,374 +731,19 @@ export const useConsoleStore = defineStore('pet-console', () => {
     return commitConfig();
   }
 
-  // --- edit mode: scenarios -------------------------------------------------
+  // --- quick switches -------------------------------------------------
 
-  type ModeScenario = Config['scenarios'][number];
-
-  /** Current enabled-state of every entry controlled by the given groups. If a
-   *  parent group is in scope, its child groups are captured too; duplicate child
-   *  ids are harmless and keep parent-only legacy modes complete. */
-  function captureSelectionsForScope(groupIds: string[]): Record<string, boolean> {
-    const scope = new Set(groupIds);
-    const next: Record<string, boolean> = {};
-    for (const section of flattenSections(view.value.sections)) {
-      if (!scope.has(section.id)) continue;
-      for (const entry of flattenSectionEntries(section)) next[entry.id] = entry.enabled;
-    }
-    return next;
-  }
-
-  /**
-   * Sync a stored selection map to a mode's current membership: keep every
-   * already-captured value, drop entries no longer in scope, and default *newly
-   * in-scope* entries to **off**. Used when groups are added/removed from a mode.
-   *
-   * New entries must NOT inherit the live preset state — a snapshot is an explicit
-   * saved ON/OFF combination, so adding a group whose entries happen to be on right
-   * now should leave them off in existing snapshots (the user updates the snapshot
-   * if they want them on). Inheriting live state is what made existing snapshots
-   * silently turn a freshly-added group on.
-   */
-  function syncSelectionsForScope(groupIds: string[], prev: Record<string, boolean> = {}): Record<string, boolean> {
-    const inScope = captureSelectionsForScope(groupIds);
-    return Object.fromEntries(Object.keys(inScope).map(id => [id, prev[id] ?? false]));
-  }
-
-  /** Filter an apply map down to entries whose enabled state would actually change. */
-  function changedSelections(selections: Record<string, boolean>): Record<string, boolean> {
-    const live = new Map(gateway.read().prompts.map(prompt => [prompt.id, prompt.enabled]));
-    return Object.fromEntries(Object.entries(selections).filter(([id, enabled]) => live.get(id) !== enabled));
-  }
-
-  /** A mode's effective layout: its stored arrangement, or one derived from the global
-   *  structure filtered to its scope (preserving nesting where the parent is in scope). */
-  function effectiveModeLayout(scenario: ModeScenario): ModeGroupLayout[] {
-    if (scenario.layout.length) return scenario.layout;
-    const scope = new Set(scenario.groupIds);
-    return flattenSections(view.value.sections)
-      .filter(s => scope.has(s.id))
-      .map(s => ({ groupId: s.id, order: s.order, parentId: s.parentId && scope.has(s.parentId) ? s.parentId : undefined }));
-  }
-
-  /** Build a mode's section tree: resolved groups re-ordered + re-nested per its layout
-   *  (each group keeps its own entries; nesting is rebuilt, depth ≤ 2 guarded). */
-  function modeSections(scenario: ModeScenario): ResolvedSection[] {
-    const layout = effectiveModeLayout(scenario);
-    const byId = new Map(flattenSections(view.value.sections).map(s => [s.id, s]));
-    const layoutById = new Map(layout.map(l => [l.groupId, l]));
-    const nodes = layout
-      .filter(l => byId.has(l.groupId))
-      .map(l => ({ ...byId.get(l.groupId)!, parentId: null as string | null, children: [] as ResolvedSection[] }));
-    const nodeById = new Map(nodes.map(n => [n.id, n]));
-    const top: ResolvedSection[] = [];
-    for (const node of nodes) {
-      const parentId = layoutById.get(node.id)?.parentId;
-      const parent = parentId ? nodeById.get(parentId) : undefined;
-      if (parent && parent.id !== node.id && !layoutById.get(parent.id)?.parentId) {
-        node.parentId = parent.id;
-        parent.children.push(node);
-      } else {
-        top.push(node);
-      }
-    }
-    const byOrder = (a: ResolvedSection, b: ResolvedSection) =>
-      (layoutById.get(a.id)?.order ?? 0) - (layoutById.get(b.id)?.order ?? 0);
-    top.sort(byOrder);
-    for (const node of top) node.children.sort(byOrder);
-    return top;
-  }
-
-  /** Sections in-use renders/operates on: the active mode's tree, else the global one.
-   *  Used for both rendering and toggle parent-lookups, so per-mode nesting governs
-   *  selection semantics too. Edit mode always uses the global structure. */
   function inUseSections(): ResolvedSection[] {
-    const modeId = useUiStore().activeModeId;
-    const scenario = modeId ? config.value.scenarios.find(s => s.id === modeId) : undefined;
-    return scenario ? modeSections(scenario) : view.value.sections;
+    if (view.value.sections.length) return view.value.sections;
+    return [{ id: '__all_entries__', source: 'custom', parentId: null, name: '全部条目', rule: 'multi', order: 0,
+      pinned: false, hidden: false, required: false, collapsed: false, entries: view.value.allEntries, children: [] }];
   }
 
   function inUseSectionById(id: string): ResolvedSection | undefined {
     return flattenSections(inUseSections()).find(s => s.id === id);
   }
 
-  /** Save the current state as a Mode scoped to `groupIds` (layout derived until edited). */
-  function saveScenario(name: string, groupIds: string[] = []): Promise<void> {
-    config.value.scenarios.push({
-      id: uid(),
-      name: name.trim() || '未命名模式',
-      groupIds,
-      layout: [],
-      selections: {},
-      snapshots: [],
-    });
-    return commitConfig();
-  }
-
-  function modeSnapshots(modeId: string): ModeSnapshot[] {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    return scenario ? snapshotsOfMode(scenario) : [];
-  }
-
-  /**
-   * The snapshot of `modeId` whose recorded ON/OFF state matches the **live preset
-   * right now**, or null. State-derived (reads `view.value`), so it survives a
-   * script toggle / page refresh without persisting a session id — and it can't lie:
-   * if the user changed entries while the script was off, nothing matches and the
-   * caller shows "未应用 / 自定义" instead of a stale name. Prefers the most specific
-   * match (most recorded entries) if several qualify.
-   */
-  function matchingSnapshotId(modeId: string): string | null {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario) return null;
-    const live = new Map<string, boolean>();
-    for (const section of flattenSections(view.value.sections))
-      for (const entry of flattenSectionEntries(section)) live.set(entry.id, entry.enabled);
-    let best: { id: string; size: number } | null = null;
-    for (const snapshot of snapshotsOfMode(scenario)) {
-      const ids = Object.keys(snapshot.selections);
-      if (!ids.length) continue;
-      if (ids.every(id => live.get(id) === snapshot.selections[id]) && (!best || ids.length > best.size))
-        best = { id: snapshot.id, size: ids.length };
-    }
-    return best?.id ?? null;
-  }
-
-  function saveModeSnapshot(modeId: string, name?: string): Promise<string | void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario) return;
-    const id = uid();
-    scenario.snapshots.push({
-      id,
-      name: name?.trim() || `快照 ${scenario.snapshots.length + 1}`,
-      selections: captureSelectionsForScope(scenario.groupIds),
-    });
-    return commitConfig().then(() => id);
-  }
-
-  function updateModeSnapshot(modeId: string, snapshotId: string): Promise<void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario) return;
-    if (snapshotId === LEGACY_SNAPSHOT_ID && !scenario.snapshots.length) {
-      scenario.selections = captureSelectionsForScope(scenario.groupIds);
-      return commitConfig();
-    }
-    const snapshot = scenario.snapshots.find(s => s.id === snapshotId);
-    if (!snapshot) return;
-    snapshot.selections = captureSelectionsForScope(scenario.groupIds);
-    return commitConfig();
-  }
-
-  function applyModeSnapshot(modeId: string, snapshotId: string): Promise<void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario) return;
-    const snapshot = snapshotsOfMode(scenario).find(s => s.id === snapshotId);
-    if (!snapshot) return;
-    const ui = useUiStore();
-    const changed = changedSelections(snapshot.selections);
-    if (!Object.keys(changed).length) {
-      ui.activeModeId = modeId;
-      ui.activeSnapshotId = snapshotId;
-      ui.activeSnapshotByMode[modeId] = snapshotId;
-      return;
-    }
-    return apply(() => setEntriesEnabled(gateway, changed)).then(() => {
-      ui.activeModeId = modeId;
-      ui.activeSnapshotId = snapshotId;
-      ui.activeSnapshotByMode[modeId] = snapshotId;
-    });
-  }
-
-  function renameModeSnapshot(modeId: string, snapshotId: string, name: string): Promise<void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario || snapshotId === LEGACY_SNAPSHOT_ID) return;
-    const snapshot = scenario.snapshots.find(s => s.id === snapshotId);
-    if (!snapshot) return;
-    snapshot.name = name.trim() || snapshot.name;
-    return commitConfig();
-  }
-
-  function deleteModeSnapshot(modeId: string, snapshotId: string): Promise<void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario || snapshotId === LEGACY_SNAPSHOT_ID) return;
-    scenario.snapshots = scenario.snapshots.filter(s => s.id !== snapshotId);
-    const ui = useUiStore();
-    if (ui.activeSnapshotByMode[modeId] === snapshotId) delete ui.activeSnapshotByMode[modeId];
-    if (ui.activeModeId === modeId && ui.activeSnapshotId === snapshotId) ui.activeSnapshotId = null;
-    return commitConfig();
-  }
-
-  /** Persist a mode's layout; sync `groupIds` + selections to the new membership. */
-  function setModeLayout(modeId: string, layout: ModeGroupLayout[]): Promise<void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario) return;
-    const groupIds = layout.map(l => l.groupId);
-    scenario.layout = layout;
-    scenario.groupIds = groupIds;
-    scenario.selections = syncSelectionsForScope(groupIds, scenario.selections);
-    scenario.snapshots = scenario.snapshots.map(snapshot => ({
-      ...snapshot,
-      selections: syncSelectionsForScope(groupIds, snapshot.selections),
-    }));
-    return commitConfig();
-  }
-
-  /**
-   * Add one or more groups to a mode (appended in order, skipping any already in).
-   * Adding a parent folder pulls its global sub-folders in with it, keeping the nesting —
-   * a mode shouldn't show a parent without the children it organizes.
-   */
-  function addGroupsToMode(modeId: string, groupIds: string[]): Promise<void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario) return;
-    const layout = effectiveModeLayout(scenario).map(l => ({ ...l }));
-    const present = new Set(layout.map(l => l.groupId));
-    const globalById = new Map(flattenSections(view.value.sections).map(s => [s.id, s]));
-
-    // Expand each selected group to include its global children, then add in that order
-    // so a parent lands just before its sub-folders.
-    const queue: string[] = [];
-    const enqueue = (id: string) => {
-      if (present.has(id) || queue.includes(id)) return;
-      queue.push(id);
-    };
-    for (const id of groupIds) {
-      enqueue(id);
-      for (const child of globalById.get(id)?.children ?? []) enqueue(child.id);
-    }
-
-    let order = layout.reduce((m, l) => Math.max(m, l.order), -1);
-    for (const id of queue) {
-      const section = globalById.get(id);
-      // Keep nesting only when the parent is (or is becoming) part of this mode.
-      const parentId =
-        section?.parentId && (present.has(section.parentId) || queue.includes(section.parentId))
-          ? section.parentId
-          : undefined;
-      layout.push({ groupId: id, order: ++order, parentId });
-      present.add(id);
-    }
-    return setModeLayout(modeId, layout);
-  }
-
-  /** Remove one or more groups from a mode; orphaned children fall back to top-level. */
-  function removeGroupsFromMode(modeId: string, groupIds: string[]): Promise<void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario) return;
-    const removed = new Set(groupIds);
-    const layout = effectiveModeLayout(scenario)
-      .filter(l => !removed.has(l.groupId))
-      .map(l => (l.parentId && removed.has(l.parentId) ? { ...l, parentId: undefined } : l));
-    return setModeLayout(modeId, layout);
-  }
-
-  function removeGroupFromMode(modeId: string, groupId: string): Promise<void> | void {
-    return removeGroupsFromMode(modeId, [groupId]);
-  }
-
-  /** Reorder a group within its sibling list (top-level or under a parent) in a mode. */
-  function nudgeModeGroup(modeId: string, groupId: string, delta: -1 | 1): Promise<void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario) return;
-    const layout = effectiveModeLayout(scenario).map(l => ({ ...l }));
-    const target = layout.find(l => l.groupId === groupId);
-    if (!target) return;
-    const siblings = layout.filter(l => (l.parentId ?? null) === (target.parentId ?? null)).sort((a, b) => a.order - b.order);
-    const i = siblings.findIndex(l => l.groupId === groupId);
-    const j = i + delta;
-    if (j < 0 || j >= siblings.length) return;
-    [siblings[i].order, siblings[j].order] = [siblings[j].order, siblings[i].order];
-    return setModeLayout(modeId, layout);
-  }
-
-  /** Nest/un-nest a group within a mode (parent must be in the mode and top-level). */
-  function setModeGroupParent(modeId: string, groupId: string, parentId: string | null): Promise<void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario) return;
-    const layout = effectiveModeLayout(scenario).map(l => ({ ...l }));
-    const target = layout.find(l => l.groupId === groupId);
-    if (!target) return;
-    if (parentId) {
-      const parent = layout.find(l => l.groupId === parentId);
-      const hasChildren = layout.some(l => l.parentId === groupId);
-      if (!parent || parent.parentId || parentId === groupId || hasChildren) return; // depth-2 / cycle guard
-    }
-    target.parentId = parentId ?? undefined;
-    return setModeLayout(modeId, layout);
-  }
-
-  /**
-   * Normalize a mode layout's `order` to a dense DFS sequence (each top-level group,
-   * then its children) so sibling ordering stays well-defined after a fractional insert.
-   */
-  function renumberModeLayout(layout: ModeGroupLayout[]): ModeGroupLayout[] {
-    let order = 0;
-    for (const node of layout.filter(l => !l.parentId).sort((a, b) => a.order - b.order)) {
-      node.order = order++;
-      layout
-        .filter(l => l.parentId === node.groupId)
-        .sort((a, b) => a.order - b.order)
-        .forEach(child => (child.order = order++));
-    }
-    return layout;
-  }
-
-  /**
-   * Drag-reorder/nest a group within a mode — the per-mode mirror of {@link placeGroup}
-   * for the global structure. Reparents (depth-2 / cycle guarded), positions the group
-   * right before `beforeId` (or at the end of its sibling list), then re-densifies orders.
-   */
-  function placeModeGroup(
-    modeId: string,
-    groupId: string,
-    parentId: string | null,
-    beforeId: string | null = null,
-  ): Promise<void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === modeId);
-    if (!scenario) return;
-    const layout = effectiveModeLayout(scenario).map(l => ({ ...l }));
-    const target = layout.find(l => l.groupId === groupId);
-    if (!target) return;
-    if (parentId) {
-      const parent = layout.find(l => l.groupId === parentId);
-      const hasChildren = layout.some(l => l.parentId === groupId);
-      if (!parent || parent.parentId || parentId === groupId || hasChildren) return; // depth-2 / cycle guard
-    }
-    target.parentId = parentId ?? undefined;
-    const siblings = layout
-      .filter(l => l.groupId !== groupId && (l.parentId ?? null) === (parentId ?? null))
-      .sort((a, b) => a.order - b.order);
-    const before = beforeId ? siblings.find(s => s.groupId === beforeId) : undefined;
-    target.order = before ? before.order - 0.5 : (siblings.at(-1)?.order ?? -1) + 1;
-    renumberModeLayout(layout);
-    return setModeLayout(modeId, layout);
-  }
-
-  function renameScenario(id: string, name: string): Promise<void> | void {
-    const scenario = config.value.scenarios.find(s => s.id === id);
-    if (!scenario) return;
-    scenario.name = name.trim() || scenario.name;
-    return commitConfig();
-  }
-
-  function deleteScenario(id: string): Promise<void> {
-    config.value.scenarios = config.value.scenarios.filter(s => s.id !== id);
-    const ui = useUiStore();
-    if (ui.activeModeId === id) {
-      ui.activeModeId = null;
-      ui.activeSnapshotId = null;
-    }
-    delete ui.activeSnapshotByMode[id];
-    if (ui.editContextId === id) ui.editContextId = null;
-    return commitConfig();
-  }
-
-  /**
-   * In-use master switch for the whole visible page (the active mode's tree, else the
-   * global one): enable every group rule-aware ({@link buildOnSelections}) or disable
-   * everything except `必开` groups ({@link buildOffSelections}). One atomic write.
-   */
   function setAllEnabled(enable: boolean): Promise<void> | void {
-    clearActiveSnapshot();
     const selections: Record<string, boolean> = {};
     for (const section of inUseSections()) {
       if (enable) buildOnSelections(section, selections);
@@ -1121,7 +754,6 @@ export const useConsoleStore = defineStore('pet-console', () => {
   }
 
   function toggleFolder(section: ResolvedSection): Promise<void> | void {
-    clearActiveSnapshot();
     const turningOn = folderState(section) !== 'on';
     const selections: Record<string, boolean> = {};
     if (turningOn) {
@@ -1136,8 +768,7 @@ export const useConsoleStore = defineStore('pet-console', () => {
     // profile switch: clear the parent's other units (sibling folders + its own
     // direct plain entries).
     if (turningOn && section.parentId) {
-      // Resolve the parent within the *in-use* tree (mode-specific when a mode is active),
-      // so per-mode nesting governs the single-select exclusion too.
+      // Resolve the parent in the shared group tree.
       const parent = inUseSectionById(section.parentId);
       if (parent?.rule === 'single') {
         for (const sibling of parent.children) {
@@ -1156,7 +787,6 @@ export const useConsoleStore = defineStore('pet-console', () => {
   /** Toggle/select an entry, honouring its section rule. Always-on entries are locked. */
   function toggleEntry(section: ResolvedSection, entry: ResolvedEntry): Promise<void> | void {
     if (entry.alwaysOn && !entry.input) return; // locked on, nothing to do
-    clearActiveSnapshot();
     const affordance = affordanceOf(section, entry);
 
     if (affordance === 'radio') {
@@ -1193,12 +823,6 @@ export const useConsoleStore = defineStore('pet-console', () => {
     return apply(() => setEntryContent(gateway, entry.id, content), '已保存');
   }
 
-  function clearActiveSnapshot(): void {
-    const ui = useUiStore();
-    if (ui.activeModeId) delete ui.activeSnapshotByMode[ui.activeModeId];
-    ui.activeSnapshotId = null;
-  }
-
   return {
     view,
     config,
@@ -1213,6 +837,7 @@ export const useConsoleStore = defineStore('pet-console', () => {
     toggleFolder,
     setAllEnabled,
     setInputValue,
+    applyPlanSelections: (selections: Record<string, boolean>) => apply(() => setEntriesEnabled(gateway, selections)),
     // edit: groups
     orderedSections,
     setGroupRule,
@@ -1237,25 +862,7 @@ export const useConsoleStore = defineStore('pet-console', () => {
     setEntriesHidden,
     setEntriesInput,
     setEntriesAlwaysOn,
-    // modes
     inUseSections,
-    modeSections,
-    saveScenario,
-    modeSnapshots,
-    matchingSnapshotId,
-    saveModeSnapshot,
-    updateModeSnapshot,
-    applyModeSnapshot,
-    renameModeSnapshot,
-    deleteModeSnapshot,
-    addGroupsToMode,
-    removeGroupsFromMode,
-    removeGroupFromMode,
-    nudgeModeGroup,
-    setModeGroupParent,
-    placeModeGroup,
-    renameScenario,
-    deleteScenario,
   };
 });
 
@@ -1305,23 +912,6 @@ export const useUiStore = defineStore('pet-ui', () => {
   const editNavOpen = ref(true);
   /** Collapse state of the synthetic 未整理 group — it has no config record, so it lives here. */
   const unorganizedCollapsed = ref(false);
-  /**
-   * The mode the user is currently *in* (explicit selection, not state-derived), or
-   * null for 全部. Scopes the in-use view + reveal toggle to that mode's groups, and
-   * gives a persistent chip highlight so switching modes is visible. Session-only.
-   */
-  const activeModeId = ref<string | null>(null);
-  /** The explicitly applied snapshot inside the active mode, if any. */
-  const activeSnapshotId = ref<string | null>(null);
-  /** Last explicitly applied snapshot per mode, so mode switching preserves the title. */
-  const activeSnapshotByMode = ref<Record<string, string>>({});
-  /**
-   * Edit context: `null` = edit the global group **结构**; a mode id = edit that
-   * **模式** (membership + order + nesting). One surface, contextualized by the chip
-   * strip — replaces the old 分组/模式 segmented sub-view.
-   */
-  const editContextId = ref<string | null>(null);
-
   function setTheme(next: ThemePref): void {
     theme.value = next;
   }
@@ -1343,10 +933,6 @@ export const useUiStore = defineStore('pet-ui', () => {
     showHidden,
     editNavOpen,
     unorganizedCollapsed,
-    activeModeId,
-    activeSnapshotId,
-    activeSnapshotByMode,
-    editContextId,
     setTheme,
     toggleTheme,
     setActiveTool,

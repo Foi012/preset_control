@@ -85,6 +85,8 @@ export type Theme = {
     surfaceGlass: string;
     /** Raised row / hovered surface */
     surfaceRaised: string;
+    /** Recessed workspace around document paper. */
+    workspace: string;
     /** Scrim behind modals */
     overlay: string;
 
@@ -140,6 +142,7 @@ const dark: Theme = {
     surface: '#1b1d22',
     surfaceGlass: 'rgba(27, 29, 34, 0.78)',
     surfaceRaised: 'rgba(36, 39, 46, 0.72)',
+    workspace: '#13151a',
     overlay: 'rgba(0, 0, 0, 0.45)',
 
     text: '#e8e9ed',
@@ -186,6 +189,7 @@ const light: Theme = {
     surface: '#ffffff',
     surfaceGlass: 'rgba(255, 255, 255, 0.82)',
     surfaceRaised: 'rgba(243, 244, 247, 0.74)',
+    workspace: '#e3e6ed',
     overlay: 'rgba(20, 22, 28, 0.32)',
 
     text: '#1c1e24',

@@ -36,7 +36,7 @@ function onInput(value: string) {
         type="button"
         class="pet-tile__toggle"
         :disabled="entry.alwaysOn || readonly"
-        :title="entry.alwaysOn ? '常驻开启' : entry.enabled ? '关闭' : '开启'"
+        :title="entry.alwaysOn ? '已锁定为开启，请到快速分组中解锁后再关闭' : entry.enabled ? '关闭' : '开启'"
         @click="onToggle"
       >
         <SelectMark type="checkbox" :state="entry.enabled ? 'on' : 'off'" />
@@ -54,10 +54,10 @@ function onInput(value: string) {
   </div>
 
   <!-- Always-on (📍): shown, locked on, non-interactive. -->
-  <div v-else-if="affordance === 'locked'" class="pet-tile pet-tile--on pet-tile--locked" :title="`${label}（常驻开启）`">
+  <div v-else-if="affordance === 'locked'" class="pet-tile pet-tile--on pet-tile--locked" :title="`${label}（已锁定开启）`">
     <span class="pet-tile__mark pet-tile__mark--lock" />
     <span class="pet-tile__label">{{ label }}</span>
-    <span class="pet-tile__pin">常驻</span>
+    <span class="pet-tile__pin">锁定</span>
   </div>
 
   <!-- Plain entries: a big toggle button. The whole tile is the hit target. -->

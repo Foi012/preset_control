@@ -6,11 +6,14 @@ export type IconName =
   | 'bookmark-plus'
   | 'bot'
   | 'check'
+  | 'copy'
   | 'chevron-down'
   | 'chevron-left'
   | 'chevron-right'
   | 'chevron-up'
   | 'close'
+  | 'clear-selection'
+  | 'panel-right'
   | 'edit'
   | 'download'
   | 'eye'
@@ -20,11 +23,14 @@ export type IconName =
   | 'lock'
   | 'menu'
   | 'moon'
+  | 'more'
+  | 'select'
   | 'outdent'
   | 'pin'
   | 'play'
   | 'power'
   | 'refresh'
+  | 'search'
   | 'settings'
   | 'sliders'
   | 'sun'
@@ -56,11 +62,17 @@ defineProps<{ name: IconName }>();
       <path d="M6 7h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
       <path d="M9 12v2M15 12v2M2 12v2M22 12v2" />
     </template>
+    <template v-else-if="name === 'copy'"><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4" /></template>
     <path v-else-if="name === 'check'" d="m5 12 5 5L20 7" />
     <path v-else-if="name === 'chevron-down'" d="m6 9 6 6 6-6" />
     <path v-else-if="name === 'chevron-left'" d="m15 6-6 6 6 6" />
     <path v-else-if="name === 'chevron-right'" d="m9 6 6 6-6 6" />
     <path v-else-if="name === 'chevron-up'" d="m18 15-6-6-6 6" />
+    <template v-else-if="name === 'clear-selection'">
+      <path d="M8 4H5a1 1 0 0 0-1 1v3M4 12v2M4 18v1a1 1 0 0 0 1 1h3M12 20h2M18 20h1a1 1 0 0 0 1-1v-3M20 12v-2M20 6V5a1 1 0 0 0-1-1h-3M12 4h-1" />
+      <path d="M3 21 21 3" />
+    </template>
+    <template v-else-if="name === 'panel-right'"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></template>
     <path v-else-if="name === 'close'" d="M6 6l12 12M18 6 6 18" />
     <path v-else-if="name === 'download'" d="M12 3v12M7 10l5 5 5-5M5 21h14" />
     <path v-else-if="name === 'edit'" d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
@@ -76,6 +88,8 @@ defineProps<{ name: IconName }>();
     <path v-else-if="name === 'grip'" d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" />
     <path v-else-if="name === 'lock'" d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6V11ZM12 15v2" />
     <path v-else-if="name === 'menu'" d="M4 7h16M4 12h16M4 17h16" />
+    <template v-else-if="name === 'more'"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" /></template>
+    <path v-else-if="name === 'select'" d="M8 4H5a1 1 0 0 0-1 1v3M4 12v2M4 18v1a1 1 0 0 0 1 1h3M12 20h2M18 20h1a1 1 0 0 0 1-1v-3M20 12v-2M20 6V5a1 1 0 0 0-1-1h-3M12 4h-1" />
     <template v-else-if="name === 'moon'">
       <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
     </template>
@@ -86,6 +100,10 @@ defineProps<{ name: IconName }>();
     />
     <path v-else-if="name === 'play'" d="M8 5v14l11-7-11-7Z" />
     <path v-else-if="name === 'power'" d="M12 3v8M8.4 7.5a6 6 0 1 0 7.2 0" />
+    <template v-else-if="name === 'search'">
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m16 16 5 5" />
+    </template>
     <path v-else-if="name === 'refresh'" d="M20 12a8 8 0 0 1-14 5M4 12a8 8 0 0 1 14-5M18 3v4h-4M6 21v-4h4" />
     <template v-else-if="name === 'settings'">
       <path
